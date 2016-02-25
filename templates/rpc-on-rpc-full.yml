@@ -1,0 +1,852 @@
+# Template Version (Liberty)
+heat_template_version: 2015-10-15
+
+# Template Description
+description: >
+  Deploy A Rackspace Private Cloud on Rackspace Private Cloud
+  Includes: Full Compute Stack, Block Storage, Object Storage
+
+# Template Parameters
+parameters:
+  ansible_tags:
+    type: string
+    label: Ansible Tag
+    description: This ansible tag to be run via ansible.
+    default: prepare
+    constraints:
+      - allowed_values:
+        - prepare
+        - deploy
+        - upgrade
+        - tempest
+  rpc_openstack_repo:
+    type: string
+    label: RPC Openstack Repository Github URL
+    description: The URL of the rpc-openstack git repository.
+    default: https://github.com/rcbops/rpc-openstack.git
+  rpc_openstack_branch:
+    type: string
+    label: RPC Openstack Branch/Hash/Tag
+    description: The branch/hash/tag of rpc-openstack to checkout and deploy.
+    default: master
+  rpc_heat_ansible_repo:
+    type: string
+    label: RPC Heat Ansible Github Repo
+    description: The URL of the repository for RPC Heat Ansible.
+    default: https://github.com/cloud-training/rpc-heat-ansible.git
+  rpc_heat_ansible_branch:
+    type: string
+    label: RPC Heat Ansible Branch
+    description: The branch of RPC Heat Ansible to clone.
+    default: master
+  rpc_tenant_id:
+    type: string
+    label: RPC Tenant ID
+    description: Tenant ID to deploy servers with.
+    default: "SomeCloudTenant"
+  rpc_tenant_username:
+    type: string
+    label: RPC Tenant Username
+    description: The RPC Tenant Username to deploy servers with.
+    default: "SomeCloudUsername"
+  rpc_tenant_password:
+    type: string
+    label: RPC Tenant Password
+    description: The RPC Tenant Password.
+    default: "SomeTenantPassword"
+  rpc_cloud_api_key:
+    type: string
+    label: RPC API Key
+    description: An API Key for the RPC Cloud to deploy in.
+    default: "SomeAPIKey"
+  deploy_retries:
+    type: int
+    label: Number of deployment retries
+    description: The number of times the ansible should retry the deployment playbooks
+    default: 1
+
+# Template Resources
+resources:
+  
+  # The password for the Heat Stack
+  password:
+    type: OS::Heat::RandomString
+    properties:
+      length: 12
+      sequence: lettersdigits
+
+  # The nova keypair for the Heat Stack
+  keypair:
+    type: OS::Nova::KeyPair
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-rpc-keypair"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      save_private_key: True
+
+  # Create the networks needed for RPC
+  # Create the management network
+  # The neutron L2 network for the Heat Stack management network
+  management_network:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-management-network"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+
+  # The neutron subnet for the Heat Stack management network
+  management_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network: { get_resource: management_network }
+      cidr: 192.168.2.0/24
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-management-subnet"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+
+  # Create the VLAN network
+  # The neutron L2 network for the Heat Stack vlan network
+  vlan_network:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-vlan-network"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+
+  # The neutron subnet for the Heat Stack vlan network
+  vlan_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network: { get_resource: vlan_network }
+      cidr: 192.168.2.0/24
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-vlan-subnet"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+
+  # Create all needed volumes for all servers
+  # Create root volume for all devices
+  # Create root volume for haproxy server
+  root_volume_haproxy:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-haproxy"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for infra01
+  root_volume_infra01:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-infra01"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for infra02
+  root_volume_infra02:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-infra02"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for infra03
+  root_volume_infra03:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-infra03"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for logger01
+  root_volume_logger01:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-logger01"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for compute01
+  root_volume_compute01:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-compute01"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for compute02
+  root_volume_compute02:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-compute02"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for volume01
+  root_volume_volume01:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume01"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for volume02
+  root_volume_volume02:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume02"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for block01
+  root_volume_block01:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-block01"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for block02
+  root_volume_block02:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-block02"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create root volume for block03
+  root_volume_block03:
+    type: OS::Cinder::Volume
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-block03"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      ########################################
+      ## This needs to be a variable: jwagner
+      ########################################
+      size: 60
+      volume_type: lvm
+
+  # Create 3 cinder volumes for each swift node
+  # Create cinder volume 1 object server 1
+  volume01_os01:
+    type: OS::Cinder::Volume
+    description: Volume 1 for Object Server 1
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume01-os01"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      #######################################
+      # These need to be parameters (jwagner)
+      size: 1
+      volume_type: lvm
+      #######################################
+  
+  # Create cinder volume 2 object server 1
+  volume02_os01:
+    type: OS::Cinder::Volume
+    description: Volume 2 for Object Server 1
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume02-os01"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      #######################################
+      # These need to be parameters (jwagner)
+      size: 1
+      volume_type: lvm
+      #######################################
+
+  # Create cinder volume 3 object server 1
+  volume03_os01:
+    type: OS::Cinder::Volume
+    description: Volume 3 for Object Server 1
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume03-os01"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      #######################################
+      # These need to be parameters (jwagner)
+      size: 1
+      volume_type: lvm
+      #######################################
+
+  # Create cinder volume 1 object server 2
+  volume01_os02:
+    type: OS::Cinder::Volume
+    description: Volume 1 for Object Server 2
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume01-os02"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      #######################################
+      # These need to be parameters (jwagner)
+      size: 1
+      volume_type: lvm
+      #######################################
+
+  # Create cinder volume 2 object server 2
+  volume02_os02:
+    type: OS::Cinder::Volume
+    description: Volume 2 for Object Server 2
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume02-os02"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      #######################################
+      # These need to be parameters (jwagner)
+      size: 1
+      volume_type: lvm
+      #######################################
+
+  # Create cinder volume 3 object server 2
+  volume03_os02:
+    type: OS::Cinder::Volume
+    description: Volume 3 for Object Server 2
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume03-os02"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      #######################################
+      # These need to be parameters (jwagner)
+      size: 1
+      volume_type: lvm
+      #######################################
+
+  # Create cinder volume 1 object server 3
+  volume01_os03:
+    type: OS::Cinder::Volume
+    description: Volume 1 for Object Server 3
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume01-os03"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      #######################################
+      # These need to be parameters (jwagner)
+      size: 1
+      volume_type: lvm
+      #######################################
+
+  # Create cinder volume 2 object server 3
+  volume02_os03:
+    type: OS::Cinder::Volume
+    description: Volume 2 for Object Server 3
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume02-os03"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      #######################################
+      # These need to be parameters (jwagner)
+      size: 1
+      volume_type: lvm
+      #######################################
+
+  # Create cinder volume 3 object server 3
+  volume03_os03:
+    type: OS::Cinder::Volume
+    description: Volume 3 for Object Server 3
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-volume03-os03"
+          params:
+            "%heat_stack_prefix%": { "Fn::Select": [ "0", { "Fn::Split" : [ "-", { get_param: "OS::stack_id" } ] } ] }
+      #######################################
+      # These need to be parameters (jwagner)
+      size: 1
+      volume_type: lvm
+      #######################################
+
+  # Create all Servers
+  # Create HAProxy Server
+  server_haproxy:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_haproxy }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-haproxy"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Infra 01 Server
+  server_infra01:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_infra01 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-infra01"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Infra 02 Server
+  server_infra02:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_infra02 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-infra02"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Infra 03 Server
+  server_infra03:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_infra03 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-infra03"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Logger 01 Server
+  server_logger01:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_logger01 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-logger01"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Compute 01 Server
+  server_compute01:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_compute01 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-compute01"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Compute 02 Server
+  server_compute02:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_compute02 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-compute02"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Block 01 Server
+  server_block01:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_block01 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-block01"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Block 02 Server
+  server_block02:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_block02 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-block02"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Object 01 Server
+  server_object01:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping_v2:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_object01 }
+        - delete_on_termination: True
+          device_name: /dev/vdb
+          device_type: disk
+          volume_id: { get_resource: volume01_os01 }
+        - delete_on_termination: True
+          device_name: /dev/vdc
+          device_type: disk
+          volume_id: { get_resource: volume02_os01 }
+        - delete_on_termination: True
+          device_name: /dev/vdd
+          device_type: disk
+          volume_id: { get_resource: volume03_os01 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-object01"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Object 02 Server
+  server_object02:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping_v2:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_object02 }
+        - delete_on_termination: True
+          device_name: /dev/vdb
+          device_type: disk
+          volume_id: { get_resource: volume01_os02 }
+        - delete_on_termination: True
+          device_name: /dev/vdc
+          device_type: disk
+          volume_id: { get_resource: volume02_os02 }
+        - delete_on_termination: True
+          device_name: /dev/vdd
+          device_type: disk
+          volume_id: { get_resource: volume03_os02 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-object02"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+  # Create Object 03 Server
+  server_object03:
+    type: OS::Nova::Server
+    properties:
+      flavor: 4 GB
+      image: Ubuntu 14.04 LTS (Trusty Tahr)
+      admin_pass: { get_attr: [ password, value ] }
+      block_device_mapping_v2:
+        - boot_index: 1
+          delete_on_termination: True
+          device_name: /dev/vda
+          device_type: disk
+          swap_size: 8
+          volume_id: { get_resource: root_volume_object03 }
+        - delete_on_termination: True
+          device_name: /dev/vdb
+          device_type: disk
+          volume_id: { get_resource: volume01_os03 }
+        - delete_on_termination: True
+          device_name: /dev/vdc
+          device_type: disk
+          volume_id: { get_resource: volume02_os03 }
+        - delete_on_termination: True
+          device_name: /dev/vdd
+          device_type: disk
+          volume_id: { get_resource: volume03_os03 }
+      config_drive: True
+      diskConfig: AUTO
+      key_name: { get_resource: keypair }
+      name:
+        str_replace:
+          template: "%heat_stack_prefix%-object03"
+          params:
+            "%heat_stack_prefix%" : { "Fn::Select": [ "0", { "Fn::Split": [ "-", { get_param: "OS::stack_id" } ] } ] }
+      networks:
+        - network: { get_resource: management_network }
+        - network: { get_resource: vlan_network }
+
+# Template Outputs
+outputs:
+  password:
+    description: Password
+    value: { get_attr: [ password, value ] }
+  private_key:
+    description: Private Key
+    value: { get_attr: [ keypair, private_key ] }
+  server_infra01_ip:
+    description: Infra01 IP
+    value: { get_attr: [ server_infra01, accessIPv4 ] }
+  all_ips:
+    description: All IPs
+    value:
+      str_replace:
+        template: |
+          haproxy:    %server_haproxy_ip%
+          infra01:    %server_infra01_ip%
+          infra02:    %server_infra02_ip%
+          infra03:    %server_infra03_ip%
+          logger01:   %server_logger01_ip%
+          compute01:  %server_compute01_ip%
+          compute02:  %server_compute02_ip%
+          block01:    %server_block01_ip%
+          block02:    %server_block02_ip%
+          object01:   %server_object01_ip%
+          object02:   %server_object02_ip%
+          object02:   %server_object03_ip%
+        params:
+          "%server_haproxy_ip%":   { get_attr: [ server_haproxy, accessIPv4 ] }
+          "%server_infra01_ip%":   { get_attr: [ server_infra01, accessIPv4 ] }
+          "%server_infra02_ip%":   { get_attr: [ server_infra02, accessIPv4 ] }
+          "%server_infra03_ip%":   { get_attr: [ server_infra03, accessIPv4 ] }
+          "%server_logger01_ip%":  { get_attr: [ server_logger01, accessIPv4 ] }
+          "%server_compute01_ip%": { get_attr: [ server_compute01, accessIPv4 ] }
+          "%server_compute02_ip%": { get_attr: [ server_compute02, accessIPv4 ] }
+          "%server_block01_ip%":   { get_attr: [ server_block01, accessIPv4 ] }
+          "%server_block02_ip%":   { get_attr: [ server_block02, accessIPv4 ] }
+          "%server_object01_ip%":  { get_attr: [ server_object01, accessIPv4 ] }
+          "%server_object02_ip%":  { get_attr: [ server_object02, accessIPv4 ] }
+          "%server_object03_ip%":  { get_attr: [ server_object03, accessIPv4 ] }
