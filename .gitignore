@@ -2,3 +2,4 @@
 rpc-*-environment.yml
 rpc-*-environment-lon.yml
 environments/user-*.yml
+venv/

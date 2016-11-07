@@ -1,0 +1,1704 @@
+# Template Version (Liberty)
+heat_template_version: 2015-10-15
+
+# Template Description
+description: >
+  Deploy A Rackspace Private Cloud on Rackspace Private Cloud
+  Includes: Full Compute Stack, Block Storage, Object Storage
+
+# Template Parameters
+parameters:
+  ansible_tags:
+    type: string
+    label: Ansible Tag
+    description: This ansible tag to be run via ansible.
+    default: prepare
+  ssh_user_key:
+    type: string
+    label: SSH Keypair Name
+    description: Name of the ssh key used to ssh into deployment server
+  rpc_repo:
+    type: string
+    label: RPC Openstack Repository Github URL
+    description: The URL of the rpc-openstack git repository.
+    default: https://github.com/rcbops/rpc-openstack.git
+  rpc_branch:
+    type: string
+    label: RPC Openstack Branch/Hash/Tag
+    description: The branch/hash/tag of rpc-openstack to checkout and deploy.
+    default: master
+  rpc_heat_ansible_repo:
+    type: string
+    label: RPC Heat Ansible Github Repo
+    description: The URL of the repository for RPC Heat Ansible.
+    default: https://github.com/cloud-training/rpc-heat-ansible.git
+  rpc_heat_ansible_branch:
+    type: string
+    label: RPC Heat Ansible Branch
+    description: The branch of RPC Heat Ansible to clone.
+    default: master
+  external_gateway:
+    type: string
+    label: Stack external network gateway
+    description: The network used for external routing
+    default: public
+  floating_ip_network:
+    type: string
+    label: External network for floating ips
+    description: External Floating network to give stack floating IPs from.
+    default: public
+  management_subnet_cidr:
+    type: string
+    label: RPC Management Network CIDR
+    description: The management CIDR for the RPC cluster
+    default: 192.168.2.0/24
+  vlan_subnet_cidr:
+    type: string
+    label: RPC VLAN network CIDR
+    description: The provider VLAN network CIDR for the RPC cluster
+    default: 192.168.3.0/24
+  storage_subnet_cidr:
+    type: string
+    label: RPC Storage network CIDR
+    description: The Storage network CIDR for the RPC cluster
+    default: 192.168.4.0/24
+  root_volume_size:
+    type: number
+    label: root volume size
+    description: The size in GB of root volume for the servers
+    default: 25
+  root_volume_type:
+    type: string
+    label: type of volume for server root volume
+    description: The volume type to be used for root volumes of servers
+    default: lvm
+    constraints:
+      - allowed_values:
+        - lvm
+        - lvm_ssd
+  object_volume_type:
+    type: string
+    label: object volume type
+    description: The type of volume to be used for object server object volumes
+    default: lvm
+    constraints:
+      - allowed_values:
+        - lvm
+        - lvm_ssd
+  object_volume_size:
+    type: number
+    label: object volume size
+    description: The size in GB of each object servers object storage
+    default: 10
+  deploy_retries:
+    type: number
+    label: Number of deployment retries
+    description: The number of times the ansible should retry the deployment playbooks
+    default: 1
+  availability_zone:
+    type: string
+    label: Cluster Availability Zone
+    description: The Availability Zone to deploy the cluster inventory
+    default: 'nova'
+  haproxy_flavor:
+    type: string
+    label: HAProxy Node Flavor
+    description: The flavor for the haproxy node(s)
+    default: 'rpc.medium'
+  infra_flavor:
+    type: string
+    label: Infra Node Flavor
+    description: The flavor for the infra node(s)
+    default: rpc.large
+  logger_flavor:
+    type: string
+    label: Logger Node Flavor
+    description: The flavor for the logger node(s)
+    default: rpc.medium
+  compute_flavor:
+    type: string
+    label: Compute Node Flavor
+    description: The flavor for the compute node(s)
+    default: rpc.medium
+  block_flavor:
+    type: string
+    label: Block Node Flavor
+    description: The flavor for the infra node(s)
+    default: rpc.medium
+  object_flavor:
+    type: string
+    label: Object Node Flavor
+    description: The flavor for the infra node(s)
+    default: rpc.small
+  server_image:
+    type: string
+    label: Server image
+    description: The image to use for all servers
+    default: 'Ubuntu 14.04 LTS (Trusty Tahr)'
+
+# Template Resources
+resources:
+  
+  ### Creation of virtual resources ###
+
+  # The password for the Heat Stack
+  password:
+    type: OS::Heat::RandomString
+    properties:
+      length: 12
+      sequence: lettersdigits
+
+  # Keypair to allow hosts to communicate btw each other in the stack
+  # Will allow sshing around the stack
+  keypair:
+    type: OS::Nova::KeyPair
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-rpc-keypair"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      save_private_key: True
+
+  # The security group for the stack
+  security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: Allow ICMP and SSH Ingress and Egress
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-security-group"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      rules: 
+        - protocol: icmp
+        - protocol: tcp
+          port_range_min: 22
+          port_range_max: 22
+
+  # Create the networks needed for RPC
+  # Create the router
+  stack_router:
+    type: OS::Neutron::Router
+    properties:
+      admin_state_up: True
+      external_gateway_info: 
+        network: 
+          get_param: external_gateway
+        enable_snat: True
+      ha: False
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-router"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+
+  # Create the management network
+  # The neutron L2 network for the Heat Stack management network
+  management_network:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-management-network"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+
+  # The neutron subnet for the Heat Stack management network
+  management_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network: 
+        get_resource: management_network   
+      cidr: 
+        get_param: management_subnet_cidr
+      dns_nameservers:
+        - 8.8.8.8
+        - 8.8.4.4
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-management-subnet"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+
+  # Attach the management interface to router
+  management_router_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: 
+        get_resource: stack_router
+      subnet: 
+        get_resource: management_subnet
+
+  # Create the VLAN network
+  # The neutron L2 network for the Heat Stack vlan network
+  vlan_network:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-vlan-network"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+
+  # The neutron subnet for the Heat Stack vlan network
+  vlan_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network: 
+        get_resource: vlan_network
+      cidr: 
+        get_param: vlan_subnet_cidr
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-vlan-subnet"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+
+  # Attach the vlan interface to router
+  vlan_router_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: 
+        get_resource: stack_router
+      subnet: 
+        get_resource: vlan_subnet
+
+  # Create the Storage network
+  # The neutron L2 network for the Heat Stack Storage network
+  storage_network:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-storage-network"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+
+  # The neutron subnet for the Heat Stack Storage network
+  storage_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network: 
+        get_resource: storage_network
+      cidr: 
+        get_param: storage_subnet_cidr
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-storage-subnet"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+
+  ## Disabled for now till I can find a way
+  ## to terminate on deletion (jwagner)
+
+  # Create Floating IP for Infra01
+  # floating_ip:
+  #  type: OS::Neutron::FloatingIP
+  #  properties:
+  #    floating_network: { get_param: floating_ip_network }
+
+  # Associate the Floating IP
+  #floating_ip_association:
+  #  type: OS::Neutron::FloatingIPAssociation
+  #  properties:
+  #    floatingip_id: { get_resource: floating_ip }
+  #    port_id: { get_attr: [ server_infra01, addresses, { get_resource: management_network }, 0, port ] }
+
+  # Create root volume for haproxy server
+  root_volume_haproxy:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-haproxy-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for infra01
+  root_volume_infra01:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-infra01-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for infra02
+  root_volume_infra02:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-infra02-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for infra03
+  root_volume_infra03:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-infra03-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for logger01
+  root_volume_logger01:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-logger01-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for compute01
+  root_volume_compute01:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-compute01-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for compute02
+  root_volume_compute02:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-compute02-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for block01
+  root_volume_block01:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-block01-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for block02
+  root_volume_block02:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-block02-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for object01
+  root_volume_object01:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-object01-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for object02
+  root_volume_object02:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-object02-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create root volume for object03
+  root_volume_object03:
+    type: OS::Cinder::Volume
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-object03-root"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      image: 
+        get_param: server_image
+      size: 
+        get_param: root_volume_size
+      volume_type: 
+        get_param: root_volume_type
+
+  # Create 3 cinder volumes for each object node
+  # Create cinder volume 1 object server 1
+  volume01_os01:
+    type: OS::Cinder::Volume
+    description: Volume 1 for Object Server 1
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-os01"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      size: 
+        get_param: object_volume_size
+      volume_type: 
+        get_param: object_volume_type
+
+  # Create cinder volume 2 object server 1
+  volume02_os01:
+    type: OS::Cinder::Volume
+    description: Volume 2 for Object Server 1
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume02-os01"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      size: 
+        get_param: object_volume_size
+      volume_type: 
+        get_param: object_volume_type
+
+  # Create cinder volume 3 object server 1
+  volume03_os01:
+    type: OS::Cinder::Volume
+    description: Volume 3 for Object Server 1
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume03-os01"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      size: 
+        get_param: object_volume_size
+      volume_type: 
+        get_param: object_volume_type
+
+  # Create cinder volume 1 object server 2
+  volume01_os02:
+    type: OS::Cinder::Volume
+    description: Volume 1 for Object Server 2
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-os02"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      size: 
+        get_param: object_volume_size
+      volume_type: 
+        get_param: object_volume_type
+
+  # Create cinder volume 2 object server 2
+  volume02_os02:
+    type: OS::Cinder::Volume
+    description: Volume 2 for Object Server 2
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume02-os02"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      size: 
+        get_param: object_volume_size
+      volume_type: 
+        get_param: object_volume_type
+
+  # Create cinder volume 3 object server 2
+  volume03_os02:
+    type: OS::Cinder::Volume
+    description: Volume 3 for Object Server 2
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume03-os02"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      size: 
+        get_param: object_volume_size
+      volume_type: 
+        get_param: object_volume_type
+
+  # Create cinder volume 1 object server 3
+  volume01_os03:
+    type: OS::Cinder::Volume
+    description: Volume 1 for Object Server 3
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-os03"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      size: 
+        get_param: object_volume_size
+      volume_type: 
+        get_param: object_volume_type
+
+  # Create cinder volume 2 object server 3
+  volume02_os03:
+    type: OS::Cinder::Volume
+    description: Volume 2 for Object Server 3
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume02-os03"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      size: 
+        get_param: object_volume_size
+      volume_type: 
+        get_param: object_volume_type
+
+  # Create cinder volume 3 object server 3
+  volume03_os03:
+    type: OS::Cinder::Volume
+    description: Volume 3 for Object Server 3
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume03-os03"
+          params:
+            "%heat_stack_prefix%": 
+              get_param: "OS::stack_id"
+            "%heat_stack_name%": 
+              get_param: "OS::stack_name"
+      size: 
+        get_param: object_volume_size
+      volume_type: 
+        get_param: object_volume_type
+
+  ### Configuration of servers and software ###
+
+  # RPC Deployment Server Config
+  deployment_cloud_config:
+    type: OS::Heat::CloudConfig
+    properties:
+      cloud_config:
+        output:
+          all: '| tee /var/log/cloud-init-output.log'
+        apt_upgrade: true
+        packages:
+          - linux-image-extra-virtual
+          - tmux
+          - htop
+          - multitail
+          - build-essential
+          - software-properties-common
+          - python-software-properties
+          - curl
+          - git-core
+          - python-pip
+          - python-apt
+          - python-dev
+          - libffi-dev
+          - libssl-dev
+        write_files:
+          - path: /opt/rpc-on-rpc/id_rsa
+            permissions: "0600"
+            content: { get_attr: [ keypair, private_key ] }
+          - path: /root/.ssh/config
+            permissions: "0644"
+            content: |
+              StrictHostKeyChecking no
+              UserKnownHostsFile /dev/null
+          - path: /opt/rpc-on-rpc/inventory
+            permissions: "0600"
+            content:
+              str_replace:
+                template: |
+                  [all:vars]
+                  ansible_ssh_user=root
+                  ansible_ssh_private_key_file=/opt/rpc-on-rpc/id_rsa
+                  heat_stack_id=%heat_stack_id%
+                  heat_stack_name=%heat_stack_name%
+                  heat_stack_password=%heat_stack_password%
+                  rpc_branch=%rpc_branch%
+                  deploy_retries=%deploy_retries%
+                  
+                  [all]
+                  haproxy      ansible_ssh_host=%server_haproxy_ip%  node_id=01
+                  infra01      ansible_connection=local node_id=02
+                  infra02      ansible_ssh_host=%server_infra02_ip%  node_id=03
+                  infra03      ansible_ssh_host=%server_infra03_ip%  node_id=04
+                  logger01     ansible_ssh_host=%server_logger01_ip%   node_id=05
+                  compute01    ansible_ssh_host=%server_compute01_ip%  node_id=06
+                  compute02    ansible_ssh_host=%server_compute02_ip%  node_id=07
+                  block01      ansible_ssh_host=%server_block01_ip%    node_id=08
+                  block02      ansible_ssh_host=%server_block02_ip%    node_id=09
+                  object01     ansible_ssh_host=%server_object01_ip%   node_id=10
+                  object02     ansible_ssh_host=%server_object02_ip%   node_id=11
+                  object03     ansible_ssh_host=%server_object03_ip%   node_id=12
+
+                  [haproxy]
+                  haproxy
+                  
+                  [infra]
+                  infra01
+                  infra02
+                  infra03
+                  
+                  [logger]
+                  logger01
+                  
+                  [compute]
+                  compute01
+                  compute02
+                  
+                  [block]
+                  block01
+                  block02
+                  
+                  [object]
+                  object01
+                  object02
+                  object03
+                params:
+                  "%heat_stack_id%":        { get_param: "OS::stack_id" }
+                  "%heat_stack_name%":      { get_param: "OS::stack_name" }
+                  "%heat_stack_password%":  { get_attr: [ password, value ] }
+                  "%rpc_branch%":           { get_param: "rpc_branch" }
+                  "%deploy_retries%":       { get_param: "deploy_retries" }
+                  "%server_haproxy_ip%":    { get_attr: [ server_haproxy, addresses,   { get_resource: management_network }, 0, addr ] }
+                  "%server_infra02_ip%":    { get_attr: [ server_infra02, addresses,   { get_resource: management_network }, 0, addr ] }
+                  "%server_infra03_ip%":    { get_attr: [ server_infra03, addresses,   { get_resource: management_network }, 0, addr ] }
+                  "%server_logger01_ip%":   { get_attr: [ server_logger01, addresses,  { get_resource: management_network }, 0, addr ] }
+                  "%server_compute01_ip%":  { get_attr: [ server_compute01, addresses, { get_resource: management_network }, 0, addr ] }
+                  "%server_compute02_ip%":  { get_attr: [ server_compute02, addresses, { get_resource: management_network }, 0, addr ] }
+                  "%server_block01_ip%":    { get_attr: [ server_block01, addresses,   { get_resource: management_network }, 0, addr ] }
+                  "%server_block02_ip%":    { get_attr: [ server_block02, addresses,   { get_resource: management_network }, 0, addr ] }
+                  "%server_object01_ip%":   { get_attr: [ server_object01, addresses,  { get_resource: management_network }, 0, addr ] }
+                  "%server_object02_ip%":   { get_attr: [ server_object02, addresses,  { get_resource: management_network }, 0, addr ] }
+                  "%server_object03_ip%":   { get_attr: [ server_object03, addresses,  { get_resource: management_network }, 0, addr ] }
+
+  deployment_software_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: ungrouped
+      config: |
+        #!/bin/bash
+
+        set -e
+        set -x
+
+        echo "Setup of RPC Deployment Server"
+
+  deployment_init:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - config: { get_resource: deployment_cloud_config }
+        - config: { get_resource: deployment_software_config }
+
+  # RPC Host Setup
+  rpc_host_cloud_config:
+    type: OS::Heat::CloudConfig
+    properties:
+      cloud_config:
+        output:
+          all: '| tee /var/log/cloud-init-output.log'
+        apt_upgrade: true
+
+  rpc_host_software_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: ungrouped
+      config: |
+        #!/bin/bash
+
+        set -e
+        set -x
+
+        echo "Setup of RPC Host Server"
+
+        # Copy /ubuntu/.ssh/authorized_keys to /root/.ssh/authorized_keys for Ansible Automation
+        cp /home/ubuntu/.ssh/authorized_keys /root/.ssh/authorized_keys
+
+  haproxy_init:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - config: { get_resource: rpc_host_cloud_config }
+        - config: { get_resource: rpc_host_software_config }
+
+  infrastructure_init:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - config: { get_resource: rpc_host_cloud_config }
+        - config: { get_resource: rpc_host_software_config }
+
+  logger_init:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - config: { get_resource: rpc_host_cloud_config }
+        - config: { get_resource: rpc_host_software_config }
+
+  compute_init:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - config: { get_resource: rpc_host_cloud_config }
+        - config: { get_resource: rpc_host_software_config }
+
+  block_init:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - config: { get_resource: rpc_host_cloud_config }
+        - config: { get_resource: rpc_host_software_config }
+
+  object_init:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - config: { get_resource: rpc_host_cloud_config }
+        - config: { get_resource: rpc_host_software_config }
+
+  ### Creation of all Servers ###
+
+  # Create HAProxy Server
+  server_haproxy:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: haproxy_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_haproxy
+          delete_on_termination: true
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-haproxy"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: haproxy_init }
+
+  # Create Infra 01 Server
+  server_infra01:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: infra_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_infra01
+          delete_on_termination: true
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_param: ssh_user_key
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-infra01"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+        - network: 
+            get_resource: vlan_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: deployment_init }
+
+  # Create Infra 02 Server
+  server_infra02:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: infra_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_infra02
+          delete_on_termination: true
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-infra02"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+        - network: 
+            get_resource: vlan_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: infrastructure_init }
+
+  # Create Infra 03 Server
+  server_infra03:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: infra_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_infra03
+          delete_on_termination: true
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-infra03"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+        - network: 
+            get_resource: vlan_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: infrastructure_init }
+
+  # Create Logger 01 Server
+  server_logger01:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: logger_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_logger01
+          delete_on_termination: true
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-logger01"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: logger_init }
+
+  # Create Compute 01 Server
+  server_compute01:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: compute_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_compute01
+          delete_on_termination: true 
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-compute01"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+        - network: 
+            get_resource: vlan_network
+        - network: 
+            get_resource: storage_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: compute_init }
+
+  # Create Compute 02 Server
+  server_compute02:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: compute_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_compute02
+          delete_on_termination: true 
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-compute02"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+        - network: 
+            get_resource: vlan_network
+        - network: 
+            get_resource: storage_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: compute_init }
+
+  # Create Block 01 Server
+  server_block01:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: block_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_block01
+          delete_on_termination: true
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-block01"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+        - network: 
+            get_resource: storage_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: block_init }
+
+  # Create Block 02 Server
+  server_block02:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: block_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_block02
+          delete_on_termination: true
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-block02"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+        - network: 
+            get_resource: storage_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: block_init }
+
+  # Create Object 01 Server
+  server_object01:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: object_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_object01
+          delete_on_termination: true
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-object01"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+        - network: 
+            get_resource: storage_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: object_init }
+
+  # Create Volume Attachments for Object Server 01
+  # Create attachment for cinder volume 1 object server 1
+  volume01_os01_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: 
+        get_resource: volume01_os01
+      instance_uuid:
+        get_resource: server_object01
+      mountpoint: /dev/vdb
+
+  # Create attachment for cinder volume 2 object server 1
+  volume01_os02_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: 
+        get_resource: volume01_os02
+      instance_uuid:
+        get_resource: server_object01
+
+  # Create attachment for cinder volume 3 object server 1
+  volume01_os03_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: 
+        get_resource: volume01_os03
+      instance_uuid:
+        get_resource: server_object01
+
+  # Create Object 02 Server
+  server_object02:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: object_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_object02
+          delete_on_termination: true
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-object02"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+        - network: 
+            get_resource: storage_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: object_init }
+
+  # Create Volume Attachments for Object Server 02
+  # Create attachment for cinder volume 1 object server 2
+  volume02_os01_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: 
+        get_resource: volume02_os01
+      instance_uuid:
+        get_resource: server_object02
+
+  # Create attachment for cinder volume 2 object server 2
+  volume02_os02_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: 
+        get_resource: volume02_os02
+      instance_uuid:
+        get_resource: server_object02
+
+  # Create attachment for cinder volume 3 object server 2
+  volume02_os03_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: 
+        get_resource: volume02_os03
+      instance_uuid:
+        get_resource: server_object02
+
+  # Create Object 03 Server
+  server_object03:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: 
+        get_param: availability_zone
+      flavor: 
+        get_param: object_flavor
+      admin_pass: 
+        get_attr: [ password, value ]
+      block_device_mapping:
+        - device_name: vda
+          volume_id: 
+            get_resource: root_volume_object03
+          delete_on_termination: true
+      config_drive: True
+      security_groups: 
+        - get_resource: security_group
+      key_name: 
+        get_resource: keypair
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-object03"
+          params:
+            "%heat_stack_prefix%" :
+              get_param: "OS::stack_id"
+            "%heat_stack_name%" :
+              get_param: "OS::stack_name"
+      networks:
+        - network: 
+            get_resource: management_network
+        - network: 
+            get_resource: storage_network
+      user_data_format: SOFTWARE_CONFIG
+      user_data: { get_resource: object_init }
+
+  # Create Volume Attachments for Object Server 03
+  # Create attachment for cinder volume 1 object server 3
+  volume03_os01_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: 
+        get_resource: volume03_os01
+      instance_uuid:
+        get_resource: server_object03
+
+  # Create attachment for cinder volume 2 object server 3
+  volume03_os02_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: 
+        get_resource: volume03_os02
+      instance_uuid:
+        get_resource: server_object03
+
+  # Create attachment for cinder volume 3 object server 3
+  volume03_os03_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id: 
+        get_resource: volume03_os03
+      instance_uuid:
+        get_resource: server_object03
+
+  ### Predeploy Host Configuration ###
+  rpc_host_ansible_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: script
+      inputs:
+        - name: rpc_repo
+          description: RPC Software Git Repository URL
+          type: String
+        - name: rpc_branch
+          description: RPC Software Git Branch/Tag
+          type: String
+        - name: rpc_heat_ansible_repo
+          description: RPC Heat Ansible Git Repository URL
+          type: String
+        - name: rpc_heat_ansible_branch
+          description: RPC Heat Ansible Git Branch/Tag
+          type: String
+      config: |
+        #!/bin/bash
+        
+        set -e
+        set -x
+        
+        logdir=/var/log/heat-deployments
+        prefix=${logdir}/config-rpc-software
+        
+        function exit_failure {
+          echo "FAILURE: '$@'"
+          exit 1
+        }
+
+        function exit_success {
+          touch ${prefix}.ran
+          exit 0
+        }
+
+        # Set log file
+        mkdir -p $logdir
+        exec &> >(tee -a ${prefix}.log)
+        [ -e ${prefix}.ran ] && exit 0
+        
+        chmod -R 0600 ${logdir}
+        
+        # Begin Configuration of RPC Host(s)
+        echo "Configure RPC Hosts"
+        
+        # Set all needed env vars 
+        export HOME="/root"
+
+        # Clone RPC Repo
+        if [ -d "/opt/rpc-openstack" ]; then rm -Rf /opt/rpc-openstack; fi
+        pushd /opt
+        git clone $rpc_repo -b $rpc_branch || exit_failure "RPC Repo Git Clone Failure"
+        cd rpc-openstack
+        ( git submodule init && git submodule sync && git submodule update ) || exit_failure "Failed to update RPC submodules"
+        popd
+        
+        # Clone rpc-heat-ansible repo
+        if [ -d "/opt/rpc-heat-ansible" ]; then rm -Rf /opt/rpc-heat-ansible; fi
+        pushd /opt
+        git clone $rpc_heat_ansible_repo -b $rpc_heat_ansible_branch || exit_failure "RPC Heat Ansbile Git Clone Failure"
+        cd rpc-heat-ansible
+
+        if [[ "$rpc_heat_ansible_repo" != "https://github.com/cloud-training/rpc-heat-ansible.git" ]]; then
+          git remote add upstream https://github.com/cloud-training/rpc-heat-ansible.git
+        fi
+        popd
+
+        # Bootstrap Ansible and PIP
+        pushd /opt/rpc-openstack/openstack-ansible
+        ./scripts/bootstrap-ansible.sh || exit_failure "Failed to execute bootstrap-ansible.sh"
+        popd
+
+        exit_success
+
+  # Run host config ansible playbooks
+  rpc_host_ansible_deploy:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      input_values:
+        rpc_repo:
+          get_param: rpc_repo
+        rpc_branch:
+          get_param: rpc_branch
+        rpc_heat_ansible_repo:
+          get_param: rpc_heat_ansible_repo
+        rpc_heat_ansible_branch:
+          get_param: rpc_heat_ansible_branch
+      config:
+        get_resource: rpc_host_ansible_config
+      server:
+        get_resource: server_infra01
+    depends_on:
+      - haproxy_init
+      - deployment_init
+      - infrastructure_init
+      - compute_init
+      - block_init
+      - object_init
+
+  ### Deployment of RPC Software ###
+
+  # RPC Deployment Config
+  rpc_software_deploy_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: script
+      config: |
+        #!/bin/bash
+        
+        set -e
+        set -x
+        
+        logdir=/var/log/heat-deployments
+        prefix=${logdir}/config-rpc-software
+        
+        function exit_failure {
+          echo "FAILURE: '$@'"
+          exit 1
+        }
+
+        function exit_success {
+          touch ${prefix}.ran
+          exit 0
+        }
+
+        echo "Deploy RPC Software"
+
+        exit_success
+
+  # Deploy RPC ( wait for all inits to come back )
+  rpc_software_deploy:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      config:
+        get_resource: rpc_software_deploy_config
+      server:
+        get_resource: server_infra01
+    depends_on:
+      - rpc_host_ansible_deploy
+
+# Template Outputs
+outputs:
+  
+  # Save the password created for the vms
+  password:
+    description: Password
+    value:
+      get_attr: [ password, value ]
+
+  # Infra01 (deployment host) Management IP
+  server_infra01_private_ip:
+    description: Infra01 Management IP
+    value:
+      get_attr: [ server_infra01, addresses, { get_resource: management_network }, 0, addr ]
+
+  # Infra01 (deployment host) Floating IP
+  #server_infra01_floating_ip:
+  #  description: Infra01 Floating IP
+  #  value:
+  #     get_attr: [ floating_ip, floating_ip_address ]
+  
+  # All stack server IPs
+  all_ips:
+    description: All Management IPs
+    value:
+      str_replace:
+        template: |
+          haproxy      - %server_haproxy_ip%
+          infra01      - %server_infra01_ip%
+          infra02      - %server_infra02_ip%
+          infra03      - %server_infra03_ip%
+          compute01    - %server_compute01_ip%
+          compute02    - %server_compute02_ip%
+          block01      - %server_block01_ip%
+          block02      - %server_block02_ip%
+          object01     - %server_object01_ip%
+          object02     - %server_object02_ip%
+          object03     - %server_object03_ip%
+        params:
+          "%server_haproxy_ip%":   { get_attr: [ server_haproxy, addresses,   { get_resource: management_network }, 0, addr ] }
+          "%server_infra01_ip%":   { get_attr: [ server_infra01, addresses,   { get_resource: management_network }, 0, addr ] }
+          "%server_infra02_ip%":   { get_attr: [ server_infra02, addresses,   { get_resource: management_network }, 0, addr ] }
+          "%server_infra03_ip%":   { get_attr: [ server_infra03, addresses,   { get_resource: management_network }, 0, addr ] }
+          "%server_compute01_ip%": { get_attr: [ server_compute01, addresses, { get_resource: management_network }, 0, addr ] }
+          "%server_compute02_ip%": { get_attr: [ server_compute02, addresses, { get_resource: management_network }, 0, addr ] }
+          "%server_block01_ip%":   { get_attr: [ server_block01, addresses,   { get_resource: management_network }, 0, addr ] }
+          "%server_block02_ip%":   { get_attr: [ server_block02, addresses,   { get_resource: management_network }, 0, addr ] }
+          "%server_object01_ip%":  { get_attr: [ server_object01, addresses,  { get_resource: management_network }, 0, addr ] }
+          "%server_object02_ip%":  { get_attr: [ server_object02, addresses,  { get_resource: management_network }, 0, addr ] }
+          "%server_object03_ip%":  { get_attr: [ server_object03, addresses,  { get_resource: management_network }, 0, addr ] }
+  
+  # All object server object device mount points
+  volume01_os01_device:
+    description: All information about the object storage 01 device 01
+    value:
+      get_attr: [ volume01_os01, attachments]
+  volume01_os02_device:
+    description: All information about the object storage 01 device 02
+    value:
+      get_attr: [ volume01_os02, attachments]
+  volume01_os03_device:
+    description: All information about the object storage 01 device 03
+    value:
+      get_attr: [ volume01_os03, attachments]
+  volume02_os01_device:
+    description: All information about the object storage 02 device 01
+    value:
+      get_attr: [ volume02_os01, attachments]
+  volume02_os02_device:
+    description: All information about the object storage 02 device 02
+    value:
+      get_attr: [ volume02_os02, attachments]
+  volume02_os03_device:
+    description: All information about the object storage 02 device 03
+    value:
+      get_attr: [ volume02_os03, attachments]
+  volume03_os01_device:
+    description: All information about the object storage 03 device 01
+    value:
+      get_attr: [ volume03_os01, attachments]
+  volume03_os02_device:
+    description: All information about the object storage 03 device 02
+    value:
+      get_attr: [ volume03_os02, attachments]
+  volume03_os03_device:
+    description: All information about the object storage 03 device 03
+    value:
+      get_attr: [ volume03_os03, attachments]
