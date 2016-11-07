@@ -3,6 +3,8 @@ set -ex
 
 # Set ENV Variables
 export TENANT=${TENANT:-"admin"}
+export KEY_NAME=${KEY_NAME:-"ubuntu-key"}
+export KEY_PATH=${KEY_PATH:-"~/.ssh/id_rsa.pub"}
 export IMAGE_NAME=${IMAGE_NAME:-"ubuntu-trusty-heat-agent"}
 export IMAGE_URL=${IMAGE_URL:-"http://ab031d5abac8641e820c-98e3b8a8801f7f6b990cf4f6480303c9.r33.cf1.rackcdn.com/ubuntu-trusty-heat-agent-2015_11.qcow2"}
 
@@ -27,4 +29,4 @@ openstack flavor create --ram 4096 --disk 80 --swap 4 --vcpus 6 --public rpc.lar
 # Upload Public Key
 # RIGHT NOW I DO THIS THROUGH HORIZON, NEED TO AUTOMATE A SHARED RPCQE KEY
 # This needs to be your key if you want to use it for dev
-openstack keypair create --public-key ~/.ssh/id_rsa.pub jacob_key
+openstack keypair create --public-key $KEY_PATH $KEY_NAME
