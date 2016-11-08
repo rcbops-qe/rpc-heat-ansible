@@ -326,7 +326,7 @@ resources:
   #    floating_network: { get_param: floating_ip_network }
 
   # Associate the Floating IP
-  #floating_ip_association:
+  # floating_ip_association:
   #  type: OS::Neutron::FloatingIPAssociation
   #  properties:
   #    floatingip_id: { get_resource: floating_ip }
@@ -768,7 +768,7 @@ resources:
   ### Configuration of servers and software ###
 
   # RPC Deployment Server Config
-  deployment_cloud_config:
+  deployment_init:
     type: OS::Heat::CloudConfig
     properties:
       cloud_config:
@@ -868,24 +868,24 @@ resources:
                   "%server_object02_ip%":   { get_attr: [ server_object02, addresses,  { get_resource: management_network }, 0, addr ] }
                   "%server_object03_ip%":   { get_attr: [ server_object03, addresses,  { get_resource: management_network }, 0, addr ] }
 
-  deployment_software_config:
-    type: OS::Heat::SoftwareConfig
-    properties:
-      group: ungrouped
-      config: |
-        #!/bin/bash
+#  deployment_software_config:
+#    type: OS::Heat::SoftwareConfig
+#    properties:
+#      group: ungrouped
+#      config: |
+#        #!/bin/bash
+#
+#        set -e
+#        set -x
+#
+#        echo "Setup of RPC Deployment Server"
 
-        set -e
-        set -x
-
-        echo "Setup of RPC Deployment Server"
-
-  deployment_init:
-    type: OS::Heat::MultipartMime
-    properties:
-      parts:
-        - config: { get_resource: deployment_cloud_config }
-        - config: { get_resource: deployment_software_config }
+#  deployment_init:
+#    type: OS::Heat::MultipartMime
+#    properties:
+#      parts:
+#        - config: { get_resource: deployment_cloud_config }
+#        - config: { get_resource: deployment_software_config }
 
   # RPC Host Setup
   rpc_host_cloud_config:
@@ -1518,6 +1518,10 @@ resources:
         
         # Begin Configuration of RPC Host(s)
         echo "Configure RPC Hosts"
+
+        # Sleep to allow init to finish with its apt upgrade so we dont get lock conflicts
+        echo "Sleeping to allow cloud init apt update complete."
+        sleep 60
         
         # Set all needed env vars 
         export HOME="/root"
