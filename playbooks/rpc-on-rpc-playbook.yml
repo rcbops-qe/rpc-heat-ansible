@@ -1,0 +1,17 @@
+---
+# This playbook installs Rackspace Private Cloud v13.1
+
+- name: Do Nothing
+  hosts: all
+  tags:
+    - nothing
+  tasks:
+    - name: Ping Nodes
+      ping:
+
+- name: Prepare Environment
+  hosts: all
+  tags:
+    - prepare
+  roles:
+    - packages
