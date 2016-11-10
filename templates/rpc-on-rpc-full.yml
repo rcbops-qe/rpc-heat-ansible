@@ -1592,6 +1592,12 @@ resources:
           esac
         }
 
+        function wait_for_apt {
+          while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+            sleep 5
+          done
+        }
+
         # Set log file
         mkdir -p $logdir
         exec &> >(tee -a ${prefix}.log)
@@ -1601,10 +1607,6 @@ resources:
 
         # Begin Configuration of RPC Host(s)
         echo "Configure RPC Hosts"
-
-        # Sleep to allow init to finish with its apt upgrade so we dont get lock conflicts
-        echo "Sleeping to allow cloud init apt update complete."
-        sleep 90
 
         # Set all needed env vars
         export HOME="/root"
@@ -1631,6 +1633,10 @@ resources:
         fi
         popd
 
+        # Wait for apt to finish elsewhere
+        echo "Waiting for apt to finish from cloud init"
+        wait_for_apt
+
         # Bootstrap Ansible and PIP
         pushd /opt/rpc-openstack/openstack-ansible
         ./scripts/bootstrap-ansible.sh || exit_failure "Failed to execute bootstrap-ansible.sh"
@@ -1639,6 +1645,9 @@ resources:
         # Run Prepare Ansible Tags
         pushd /opt/rpc-heat-ansible/playbooks/
         ansible-playbook -v -i /opt/rpc-on-rpc/inventory -t prepare rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
+
+        # Run Reboot Ansible Tags
+        ansible-playbook -v -i /opt/rpc-on-rpc/inventory -t reboot rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
         popd
 
         exit_success

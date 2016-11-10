@@ -12,3 +12,4 @@ install:
    - vim
    - vlan
    - python-dev
+   - tmux
