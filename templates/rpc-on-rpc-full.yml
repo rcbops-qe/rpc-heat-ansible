@@ -800,22 +800,6 @@ resources:
       cloud_config:
         output:
           all: '| tee /var/log/cloud-init-output.log'
-        apt_upgrade: true
-        packages:
-          - linux-image-extra-virtual
-          - tmux
-          - htop
-          - multitail
-          - build-essential
-          - software-properties-common
-          - python-software-properties
-          - curl
-          - git-core
-          - python-pip
-          - python-apt
-          - python-dev
-          - libffi-dev
-          - libssl-dev
         write_files:
           - path: /opt/rpc-on-rpc/id_rsa
             permissions: "0600"
@@ -912,7 +896,6 @@ resources:
       cloud_config:
         output:
           all: '| tee /var/log/cloud-init-output.log'
-        apt_upgrade: true
 
   rpc_host_software_config:
     type: OS::Heat::SoftwareConfig
@@ -1611,6 +1594,9 @@ resources:
         # Set all needed env vars
         export HOME="/root"
 
+        # Install Git Core
+        apt-get update && apt-get install -y git-core || exit_failure "Failed to update and install git-core"
+
         # Set RPC_SERIES
         get_rpc_series %rpc_release%
 
@@ -1670,12 +1656,18 @@ resources:
       server:
         get_resource: server_deployment
     depends_on:
-      - deployment_init
-      - haproxy_init
-      - infrastructure_init
-      - compute_init
-      - block_init
-      - object_init
+      - server_deployment
+      - server_haproxy
+      - server_infra01
+      - server_infra02
+      - server_infra03
+      - server_compute01
+      - server_compute02
+      - server_block01
+      - server_block02
+      - server_object01
+      - server_object02
+      - server_object03
 
   ### Deployment of RPC Software ###
 
