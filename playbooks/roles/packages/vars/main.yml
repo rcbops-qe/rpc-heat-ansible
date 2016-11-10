@@ -1,5 +1,12 @@
 ---
 install:
+   - linux-image-extra-virtual
+   - htop
+   - multitail
+   - build-essential
+   - software-properties-common
+   - python-software-properties
+   - curl
    - bridge-utils
    - git
    - lldpd
@@ -11,5 +18,8 @@ install:
    - tcpdump
    - vim
    - vlan
+   - python-apt
    - python-dev
    - tmux
+   - libffi-dev
+   - libssl-dev
