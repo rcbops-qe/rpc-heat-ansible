@@ -23,6 +23,13 @@
   roles:
     - volumes
 
+- name: Setup Swift Mount Points
+  hosts: object
+  tags:
+    - prepare
+  roles:
+    - mounts
+
 - name: Reboot Cluster
   hosts: all:!deployment
   tags:

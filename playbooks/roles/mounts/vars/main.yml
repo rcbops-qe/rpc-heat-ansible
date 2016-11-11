@@ -1,0 +1,8 @@
+# Swift Config Defaults
+swift_config:
+  drives:
+    - name: vdc
+    - name: vdd
+    - name: vde
+  mount_point: /mnt
+  mount_opts: 'noatime,nodiratime,nobarrier,logbufs=8,nobootwait'
