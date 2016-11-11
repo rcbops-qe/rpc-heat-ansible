@@ -76,6 +76,20 @@ parameters:
       - allowed_values:
         - lvm
         - lvm_ssd
+  block_volume_type:
+    type: string
+    label: block volume type
+    description: The type of volume to be used for block server object volumes
+    default: lvm
+    constraints:
+      - allowed_values:
+        - lvm
+        - lvm_ssd
+  block_volume_size:
+    type: number
+    label: block volume size
+    description: The size in GB of each block servers object storage
+    default: 10
   object_volume_type:
     type: string
     label: object volume type
@@ -610,11 +624,51 @@ resources:
       volume_type:
         get_param: root_volume_type
 
+  # Create cinder volume for volume 1 block server 1
+  volume01_block01:
+    type: OS::Cinder::Volume
+    description: Volume 1 for Block Server 1
+    properties:
+      availability_zone:
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-block01"
+          params:
+            "%heat_stack_prefix%":
+              get_param: "OS::stack_id"
+            "%heat_stack_name%":
+              get_param: "OS::stack_name"
+      size:
+        get_param: block_volume_size
+      volume_type:
+        get_param: block_volume_type
+
+  # Create cinder volume for volume 1 block server 2
+  volume01_block02:
+    type: OS::Cinder::Volume
+    description: Volume 1 for Block Server 2
+    properties:
+      availability_zone:
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-block02"
+          params:
+            "%heat_stack_prefix%":
+              get_param: "OS::stack_id"
+            "%heat_stack_name%":
+              get_param: "OS::stack_name"
+      size:
+        get_param: block_volume_size
+      volume_type:
+        get_param: block_volume_type
+
   # Create 3 cinder volumes for each object node
   # Create cinder volume 1 object server 1
   volume01_os01:
     type: OS::Cinder::Volume
-    description: Volume 1 for Object Server 1
+    description: Volume 2 for Object Server 1
     properties:
       availability_zone:
         get_param: availability_zone
@@ -1278,6 +1332,17 @@ resources:
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: block_init }
 
+  # Create Volume Attachments for Block Server 01
+  # Create attachment for cinder volume 01 block server 01
+  volume01_bs01_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id:
+        get_resource: volume01_block01
+      instance_uuid:
+        get_resource: server_block01
+      mountpoint: /dev/vdc
+
   # Create Block 02 Server
   server_block02:
     type: OS::Nova::Server
@@ -1313,6 +1378,16 @@ resources:
             get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: block_init }
+
+  # Create attachment for cinder volume 01 block server 02
+  volume01_bs02_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id:
+        get_resource: volume01_block02
+      instance_uuid:
+        get_resource: server_block02
+      mountpoint: /dev/vdc
 
   # Create Object 01 Server
   server_object01:

@@ -16,6 +16,13 @@
   roles:
     - packages
 
+- name: Setup Cinder Volume Groups
+  hosts: block
+  tags:
+    - prepare
+  roles:
+    - volumes
+
 - name: Reboot Cluster
   hosts: all:!deployment
   tags:
