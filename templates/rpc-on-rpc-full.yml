@@ -52,10 +52,10 @@ parameters:
     label: RPC Management Network CIDR
     description: The management CIDR for the RPC cluster
     default: 192.168.2.0/24
-  vlan_subnet_cidr:
+  vxlan_subnet_cidr:
     type: string
-    label: RPC VLAN network CIDR
-    description: The provider VLAN network CIDR for the RPC cluster
+    label: RPC VxLAN network CIDR
+    description: The provider VxLAN network CIDR for the RPC cluster
     default: 192.168.3.0/24
   storage_subnet_cidr:
     type: string
@@ -264,45 +264,45 @@ resources:
       subnet:
         get_resource: management_subnet
 
-  # Create the VLAN network
-  # The neutron L2 network for the Heat Stack vlan network
-  vlan_network:
+  # Create the VxLAN network
+  # The neutron L2 network for the Heat Stack vxlan network
+  vxlan_network:
     type: OS::Neutron::Net
     properties:
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-vlan-network"
+          template: "%heat_stack_name%-%heat_stack_prefix%-vxlan-network"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
 
-  # The neutron subnet for the Heat Stack vlan network
-  vlan_subnet:
+  # The neutron subnet for the Heat Stack vxlan network
+  vxlan_subnet:
     type: OS::Neutron::Subnet
     properties:
       network:
-        get_resource: vlan_network
+        get_resource: vxlan_network
       cidr:
-        get_param: vlan_subnet_cidr
+        get_param: vxlan_subnet_cidr
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-vlan-subnet"
+          template: "%heat_stack_name%-%heat_stack_prefix%-vxlan-subnet"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
 
-  # Attach the vlan interface to router
-  vlan_router_interface:
+  # Attach the vxlan interface to router
+  vxlan_router_interface:
     type: OS::Neutron::RouterInterface
     properties:
       router:
         get_resource: stack_router
       subnet:
-        get_resource: vlan_subnet
+        get_resource: vxlan_subnet
 
   # Create the Storage network
   # The neutron L2 network for the Heat Stack Storage network
@@ -878,64 +878,76 @@ resources:
                   deploy_retries=%deploy_retries%
 
                   [all]
-                  deployment   ansible_connection=local                node_id=00
-                  haproxy      ansible_ssh_host=%server_haproxy_ip%    node_id=01
-                  infra01      ansible_ssh_host=%server_infra01_ip%    node_id=02
-                  infra02      ansible_ssh_host=%server_infra02_ip%    node_id=03
-                  infra03      ansible_ssh_host=%server_infra03_ip%    node_id=04
-                  logger01     ansible_ssh_host=%server_logger01_ip%   node_id=05
-                  compute01    ansible_ssh_host=%server_compute01_ip%  node_id=06
-                  compute02    ansible_ssh_host=%server_compute02_ip%  node_id=07
-                  block01      ansible_ssh_host=%server_block01_ip%    node_id=08
-                  block02      ansible_ssh_host=%server_block02_ip%    node_id=09
-                  object01     ansible_ssh_host=%server_object01_ip%   node_id=10
-                  object02     ansible_ssh_host=%server_object02_ip%   node_id=11
-                  object03     ansible_ssh_host=%server_object03_ip%   node_id=12
+                  deployment   ansible_connection=local
+                  haproxy      ansible_ssh_host=%haproxy_management_ip%
+                  infra01      ansible_ssh_host=%infra01_management_ip%
+                  infra02      ansible_ssh_host=%infra02_management_ip%
+                  infra03      ansible_ssh_host=%infra03_management_ip%
+                  logger01     ansible_ssh_host=%logger01_management_ip%
+                  compute01    ansible_ssh_host=%compute01_management_ip%
+                  compute02    ansible_ssh_host=%compute02_management_ip%
+                  block01      ansible_ssh_host=%block01_management_ip%
+                  block02      ansible_ssh_host=%block02_management_ip%
+                  object01     ansible_ssh_host=%object01_management_ip%
+                  object02     ansible_ssh_host=%object02_management_ip%
+                  object03     ansible_ssh_host=%object03_management_ip%
 
                   [deployment]
                   deployment
 
                   [haproxy]
-                  haproxy
+                  haproxy management_ip=%haproxy_management_ip%
 
                   [infra]
-                  infra01
-                  infra02
-                  infra03
+                  infra01 management_ip=%infra01_management_ip% vxlan_ip=%infra01_vxlan_ip%
+                  infra02 management_ip=%infra02_management_ip% vxlan_ip=%infra02_vxlan_ip%
+                  infra03 management_ip=%infra03_management_ip% vxlan_ip=%infra03_vxlan_ip%
 
                   [logger]
-                  logger01
+                  logger01 management_ip=%logger01_management_ip%
 
                   [compute]
-                  compute01
-                  compute02
+                  compute01 management_ip=%compute01_management_ip% vxlan_ip=%compute01_vxlan_ip% storage_ip=%compute01_storage_ip%
+                  compute02 management_ip=%compute02_management_ip% vxlan_ip=%compute02_vxlan_ip% storage_ip=%compute02_storage_ip%
 
                   [block]
-                  block01
-                  block02
+                  block01 management_ip=%block01_management_ip% storage_ip=%block01_storage_ip%
+                  block02 management_ip=%block02_management_ip% storage_ip=%block02_storage_ip%
 
                   [object]
-                  object01
-                  object02
-                  object03
+                  object01 management_ip=%object01_management_ip% storage_ip=%object01_storage_ip%
+                  object02 management_ip=%object02_management_ip% storage_ip=%object02_storage_ip%
+                  object03 management_ip=%object03_management_ip% storage_ip=%object03_storage_ip%
                 params:
-                  "%heat_stack_id%":        { get_param: "OS::stack_id" }
-                  "%heat_stack_name%":      { get_param: "OS::stack_name" }
-                  "%heat_stack_password%":  { get_attr: [ password, value ] }
-                  "%rpc_branch%":           { get_param: "rpc_branch" }
-                  "%deploy_retries%":       { get_param: "deploy_retries" }
-                  "%server_haproxy_ip%":    { get_attr: [ server_haproxy, addresses,      { get_resource: management_network }, 0, addr ] }
-                  "%server_infra01_ip%":    { get_attr: [ server_infra01, addresses,      { get_resource: management_network }, 0, addr ] }
-                  "%server_infra02_ip%":    { get_attr: [ server_infra02, addresses,      { get_resource: management_network }, 0, addr ] }
-                  "%server_infra03_ip%":    { get_attr: [ server_infra03, addresses,      { get_resource: management_network }, 0, addr ] }
-                  "%server_logger01_ip%":   { get_attr: [ server_logger01, addresses,     { get_resource: management_network }, 0, addr ] }
-                  "%server_compute01_ip%":  { get_attr: [ server_compute01, addresses,    { get_resource: management_network }, 0, addr ] }
-                  "%server_compute02_ip%":  { get_attr: [ server_compute02, addresses,    { get_resource: management_network }, 0, addr ] }
-                  "%server_block01_ip%":    { get_attr: [ server_block01, addresses,      { get_resource: management_network }, 0, addr ] }
-                  "%server_block02_ip%":    { get_attr: [ server_block02, addresses,      { get_resource: management_network }, 0, addr ] }
-                  "%server_object01_ip%":   { get_attr: [ server_object01, addresses,     { get_resource: management_network }, 0, addr ] }
-                  "%server_object02_ip%":   { get_attr: [ server_object02, addresses,     { get_resource: management_network }, 0, addr ] }
-                  "%server_object03_ip%":   { get_attr: [ server_object03, addresses,     { get_resource: management_network }, 0, addr ] }
+                  "%heat_stack_id%":            { get_param: "OS::stack_id" }
+                  "%heat_stack_name%":          { get_param: "OS::stack_name" }
+                  "%heat_stack_password%":      { get_attr: [ password, value ] }
+                  "%rpc_branch%":               { get_param: "rpc_branch" }
+                  "%deploy_retries%":           { get_param: "deploy_retries" }
+                  "%haproxy_management_ip%":    { get_attr: [ server_haproxy, addresses,      { get_resource: management_network }, 0, addr ] }
+                  "%infra01_management_ip%":    { get_attr: [ server_infra01, addresses,      { get_resource: management_network }, 0, addr ] }
+                  "%infra02_management_ip%":    { get_attr: [ server_infra02, addresses,      { get_resource: management_network }, 0, addr ] }
+                  "%infra03_management_ip%":    { get_attr: [ server_infra03, addresses,      { get_resource: management_network }, 0, addr ] }
+                  "%logger01_management_ip%":   { get_attr: [ server_logger01, addresses,     { get_resource: management_network }, 0, addr ] }
+                  "%compute01_management_ip%":  { get_attr: [ server_compute01, addresses,    { get_resource: management_network }, 0, addr ] }
+                  "%compute02_management_ip%":  { get_attr: [ server_compute02, addresses,    { get_resource: management_network }, 0, addr ] }
+                  "%block01_management_ip%":    { get_attr: [ server_block01, addresses,      { get_resource: management_network }, 0, addr ] }
+                  "%block02_management_ip%":    { get_attr: [ server_block02, addresses,      { get_resource: management_network }, 0, addr ] }
+                  "%object01_management_ip%":   { get_attr: [ server_object01, addresses,     { get_resource: management_network }, 0, addr ] }
+                  "%object02_management_ip%":   { get_attr: [ server_object02, addresses,     { get_resource: management_network }, 0, addr ] }
+                  "%object03_management_ip%":   { get_attr: [ server_object03, addresses,     { get_resource: management_network }, 0, addr ] }
+                  "%infra01_vxlan_ip%":         { get_attr: [ server_infra01, addresses,      { get_resource: vxlan_network }, 0, addr ] }
+                  "%infra02_vxlan_ip%":         { get_attr: [ server_infra02, addresses,      { get_resource: vxlan_network }, 0, addr ] }
+                  "%infra03_vxlan_ip%":         { get_attr: [ server_infra03, addresses,      { get_resource: vxlan_network }, 0, addr ] }
+                  "%compute01_vxlan_ip%":       { get_attr: [ server_compute01, addresses,    { get_resource: vxlan_network }, 0, addr ] }
+                  "%compute02_vxlan_ip%":       { get_attr: [ server_compute02, addresses,    { get_resource: vxlan_network }, 0, addr ] }
+                  "%compute01_storage_ip%":     { get_attr: [ server_compute01, addresses,    { get_resource: storage_network }, 0, addr ] }
+                  "%compute02_storage_ip%":     { get_attr: [ server_compute02, addresses,    { get_resource: storage_network }, 0, addr ] }
+                  "%block01_storage_ip%":       { get_attr: [ server_block01, addresses,      { get_resource: storage_network }, 0, addr ] }
+                  "%block02_storage_ip%":       { get_attr: [ server_block02, addresses,      { get_resource: storage_network }, 0, addr ] }
+                  "%object01_storage_ip%":      { get_attr: [ server_object01, addresses,     { get_resource: storage_network }, 0, addr ] }
+                  "%object02_storage_ip%":      { get_attr: [ server_object02, addresses,     { get_resource: storage_network }, 0, addr ] }
+                  "%object03_storage_ip%":      { get_attr: [ server_object03, addresses,     { get_resource: storage_network }, 0, addr ] }
 
   deployment_init:
     type: OS::Heat::MultipartMime
@@ -1110,7 +1122,7 @@ resources:
         - network:
             get_resource: management_network
         - network:
-            get_resource: vlan_network
+            get_resource: vxlan_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: infrastructure_init }
 
@@ -1146,7 +1158,7 @@ resources:
         - network:
             get_resource: management_network
         - network:
-            get_resource: vlan_network
+            get_resource: vxlan_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: infrastructure_init }
 
@@ -1182,7 +1194,7 @@ resources:
         - network:
             get_resource: management_network
         - network:
-            get_resource: vlan_network
+            get_resource: vxlan_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: infrastructure_init }
 
@@ -1252,7 +1264,7 @@ resources:
         - network:
             get_resource: management_network
         - network:
-            get_resource: vlan_network
+            get_resource: vxlan_network
         - network:
             get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
@@ -1290,7 +1302,7 @@ resources:
         - network:
             get_resource: management_network
         - network:
-            get_resource: vlan_network
+            get_resource: vxlan_network
         - network:
             get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
@@ -1806,8 +1818,8 @@ outputs:
   #  value:
   #     get_attr: [ floating_ip, floating_ip_address ]
 
-  # All stack server IPs
-  all_ips:
+  # All Stack Server Management IPs
+  mangement_ips:
     description: All Management IPs
     value:
       str_replace:
@@ -1837,6 +1849,46 @@ outputs:
           "%server_object01_ip%":  { get_attr: [ server_object01, addresses,    { get_resource: management_network }, 0, addr ] }
           "%server_object02_ip%":  { get_attr: [ server_object02, addresses,    { get_resource: management_network }, 0, addr ] }
           "%server_object03_ip%":  { get_attr: [ server_object03, addresses,    { get_resource: management_network }, 0, addr ] }
+
+  # All Stack Server VxLAN IPs
+  vxlan_ips:
+    description: All VxLAN IPs
+    value:
+      str_replace:
+        template: |
+          infra01      - %server_infra01_ip%
+          infra02      - %server_infra02_ip%
+          infra03      - %server_infra03_ip%
+          compute01    - %server_compute01_ip%
+          compute02    - %server_compute02_ip%
+        params:
+          "%server_infra01_ip%":   { get_attr: [ server_infra01, addresses,     { get_resource: vxlan_network }, 0, addr ] }
+          "%server_infra02_ip%":   { get_attr: [ server_infra02, addresses,     { get_resource: vxlan_network }, 0, addr ] }
+          "%server_infra03_ip%":   { get_attr: [ server_infra03, addresses,     { get_resource: vxlan_network }, 0, addr ] }
+          "%server_compute01_ip%": { get_attr: [ server_compute01, addresses,   { get_resource: vxlan_network }, 0, addr ] }
+          "%server_compute02_ip%": { get_attr: [ server_compute02, addresses,   { get_resource: vxlan_network }, 0, addr ] }
+
+  # All Stack Server Storage IPs
+  storage_ips:
+    description: All Storage IPs
+    value:
+      str_replace:
+        template: |
+          compute01    - %server_compute01_ip%
+          compute02    - %server_compute02_ip%
+          block01      - %server_block01_ip%
+          block02      - %server_block02_ip%
+          object01     - %server_object01_ip%
+          object02     - %server_object02_ip%
+          object03     - %server_object03_ip%
+        params:
+          "%server_compute01_ip%": { get_attr: [ server_compute01, addresses,   { get_resource: storage_network }, 0, addr ] }
+          "%server_compute02_ip%": { get_attr: [ server_compute02, addresses,   { get_resource: storage_network }, 0, addr ] }
+          "%server_block01_ip%":   { get_attr: [ server_block01, addresses,     { get_resource: storage_network }, 0, addr ] }
+          "%server_block02_ip%":   { get_attr: [ server_block02, addresses,     { get_resource: storage_network }, 0, addr ] }
+          "%server_object01_ip%":  { get_attr: [ server_object01, addresses,    { get_resource: storage_network }, 0, addr ] }
+          "%server_object02_ip%":  { get_attr: [ server_object02, addresses,    { get_resource: storage_network }, 0, addr ] }
+          "%server_object03_ip%":  { get_attr: [ server_object03, addresses,    { get_resource: storage_network }, 0, addr ] }
 
   # All object server object device mount points
   volume01_os01_device:

@@ -1,0 +1,50 @@
+---
+- name: Install dependencies
+  apt:
+    pkg: "{{ item }}"
+    state: present
+    update_cache: yes
+    cache_valid_time: 600
+  register: pkgs
+  until: pkgs|success
+  with_items:
+    - ifenslave-2.6
+    - bridge-utils
+    - vlan
+
+- name: Enable networking modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - bonding
+    - 8021q
+
+- name: Ensure module persistance
+  lineinfile:
+    dest: /etc/modules
+    state: present
+    regexp: "^{{ item }}"
+    line: "{{ item }}"
+  with_items:
+    - bonding
+    - 8021q
+
+- name: Ensure /etc/network/interfaces.d exists
+  file:
+    path: /etc/network/interfaces.d
+    state: directory
+    owner: root
+    mode: 0655
+
+- name: Setup root interface
+  template:
+    src: interfaces.j2
+    dest: /etc/network/interfaces
+    mode: 0644
+
+- name: Setup rpc-on-rpc interface
+  template:
+    src: rpc-on-rpc.j2
+    dest: /etc/network/interfaces.d/rpc-on-rpc.cfg
+    mode: 0644

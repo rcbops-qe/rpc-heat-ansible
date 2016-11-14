@@ -1,0 +1,69 @@
+# Interface - Loopback
+auto lo
+iface lo inet loopback
+
+{% if management_ip is defined %}
+# Interface - eth0
+auto eth0
+iface eth0 inet manual
+    up ip link set $IFACE up
+    down ip link set $IFACE down
+
+# Bridge - Management
+auto br-mgmt
+iface br-mgmt inet static
+    bridge_stp off
+    bridge_waitport 0
+    bridge_fd 0
+    bridge_ports eth0
+    address {{ management_ip }}
+    netmask 255.255.255.0
+    dns-nameservers 8.8.8.8 8.8.4.4
+{% endif %}
+
+{% if vxlan_ip is defined %}
+auto eth1
+iface eth1 inet manual
+    up ip link set $IFACE up
+    down ip link set $IFACE down
+
+auto br-vxlan
+iface br-vxlan inet static
+    bridge_stp off
+    bridge_waitport 0
+    bridge_fd 0
+    bridge_ports eth1
+    address {{ vxlan_ip }}
+    netmask 255.255.255.0
+{% endif %}
+
+{% if storage_ip is defined %}
+{% if inventory_hostname in groups.compute %}
+auto eth2
+iface eth2 inet manual
+    up ip link set $IFACE up
+    down ip link set $IFACE down
+
+auto br-storage
+iface br-storage inet static
+    bridge_stp off
+    bridge_waitport 0
+    bridge_fd 0
+    bridge_ports eth2
+    address {{ storage_ip }}
+    netmask 255.255.255.0
+{% else %}
+iface eth1 inet manual
+    up ip link set $IFACE up
+    down ip link set $IFACE down
+
+auto br-storage
+iface br-storage inet static
+    bridge_stp off
+    bridge_waitport 0
+    bridge_fd 0
+    bridge_ports eth1
+    address {{ storage_ip }}
+    netmask 255.255.255.0
+{% endif %}
+{% endif %}
