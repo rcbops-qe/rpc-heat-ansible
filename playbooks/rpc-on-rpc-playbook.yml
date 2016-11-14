@@ -10,9 +10,10 @@
       ping:
 
 - name: Prepare Environment
-  hosts: all
+  hosts: all:!deployment
   tags:
     - prepare
+    - packages
   roles:
     - packages
 
@@ -20,6 +21,7 @@
   hosts: block
   tags:
     - prepare
+    - volumes
   roles:
     - volumes
 
@@ -27,8 +29,17 @@
   hosts: object
   tags:
     - prepare
+    - mounts
   roles:
     - mounts
+
+- name: Setup Networking
+  hosts: all:!deployment
+  tags:
+    - prepare
+    - networking
+  roles:
+    - networking
 
 - name: Reboot Cluster
   hosts: all:!deployment
