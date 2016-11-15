@@ -17,7 +17,7 @@ iface br-mgmt inet static
     bridge_fd 0
     bridge_ports eth0
     address {{ management_ip }}
-    netmask 255.255.255.0
+    netmask 255.255.252.0
     dns-nameservers 8.8.8.8 8.8.4.4
 {% endif %}
 
@@ -34,7 +34,7 @@ iface br-vxlan inet static
     bridge_fd 0
     bridge_ports eth1
     address {{ vxlan_ip }}
-    netmask 255.255.255.0
+    netmask 255.255.252.0
 {% endif %}
 
 {% if storage_ip is defined %}
@@ -51,7 +51,7 @@ iface br-storage inet static
     bridge_fd 0
     bridge_ports eth2
     address {{ storage_ip }}
-    netmask 255.255.255.0
+    netmask 255.255.252.0
 {% else %}
 iface eth1 inet manual
     up ip link set $IFACE up
@@ -64,6 +64,6 @@ iface br-storage inet static
     bridge_fd 0
     bridge_ports eth1
     address {{ storage_ip }}
-    netmask 255.255.255.0
+    netmask 255.255.252.0
 {% endif %}
 {% endif %}

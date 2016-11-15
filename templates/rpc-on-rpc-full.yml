@@ -51,17 +51,17 @@ parameters:
     type: string
     label: RPC Management Network CIDR
     description: The management CIDR for the RPC cluster
-    default: 192.168.2.0/24
+    default: 172.29.236.0/22
   vxlan_subnet_cidr:
     type: string
     label: RPC VxLAN network CIDR
     description: The provider VxLAN network CIDR for the RPC cluster
-    default: 192.168.3.0/24
+    default: 172.29.240.0/22
   storage_subnet_cidr:
     type: string
     label: RPC Storage network CIDR
     description: The Storage network CIDR for the RPC cluster
-    default: 192.168.4.0/24
+    default: 172.29.244.0/22
   root_volume_size:
     type: number
     label: root volume size
@@ -874,6 +874,7 @@ resources:
                   heat_stack_id=%heat_stack_id%
                   heat_stack_name=%heat_stack_name%
                   heat_stack_password=%heat_stack_password%
+                  heat_stack_prefix=%heat_stack_name%-%heat_stack_id%
                   rpc_branch=%rpc_branch%
                   deploy_retries=%deploy_retries%
 
@@ -1819,7 +1820,7 @@ outputs:
   #     get_attr: [ floating_ip, floating_ip_address ]
 
   # All Stack Server Management IPs
-  mangement_ips:
+  management_ips:
     description: All Management IPs
     value:
       str_replace:

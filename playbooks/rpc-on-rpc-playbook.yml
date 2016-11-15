@@ -41,6 +41,14 @@
   roles:
     - networking
 
+- name: Setup Rackspace Private Cloud Configuration
+  hosts: deployment
+  tags:
+    - prepare
+    - configure-rpc
+  roles:
+    - configure-rpc
+
 - name: Reboot Cluster
   hosts: all:!deployment
   tags:
