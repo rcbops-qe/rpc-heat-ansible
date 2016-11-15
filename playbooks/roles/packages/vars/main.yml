@@ -24,3 +24,4 @@ install:
    - libffi-dev
    - libssl-dev
    - lvm2
+   - fping
