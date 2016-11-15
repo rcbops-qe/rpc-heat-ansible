@@ -1,5 +1,5 @@
 # Volume Group Config
 volumes:
-  - name: cinder-volumes
+  - name: cinder-volume-hdd
     device:
       - /dev/vdc
