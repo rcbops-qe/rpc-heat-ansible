@@ -153,12 +153,12 @@ parameters:
     type: string
     label: Deployment Node Flavor
     description: The flavor for the deployment node
-    default: 'rpc.medium'
+    default: rpc.small
   haproxy_flavor:
     type: string
     label: HAProxy Node Flavor
     description: The flavor for the haproxy node
-    default: 'rpc.medium'
+    default: rpc.small
   infra_flavor:
     type: string
     label: Infra Node Flavor
@@ -178,7 +178,7 @@ parameters:
     type: string
     label: Block Node Flavor
     description: The flavor for the infra node(s)
-    default: rpc.medium
+    default: rpc.small
   object_flavor:
     type: string
     label: Object Node Flavor
@@ -978,9 +978,9 @@ resources:
                   haproxy management_ip=%haproxy_management_ip% container_ip=%haproxy_container_ip%
 
                   [infra]
-                  infra01 management_ip=%infra01_management_ip% container_ip=%infra01_container_ip% vxlan_ip=%infra01_vxlan_ip%
-                  infra02 management_ip=%infra02_management_ip% container_ip=%infra02_container_ip% vxlan_ip=%infra02_vxlan_ip%
-                  infra03 management_ip=%infra03_management_ip% container_ip=%infra03_container_ip% vxlan_ip=%infra03_vxlan_ip%
+                  infra01 management_ip=%infra01_management_ip% container_ip=%infra01_container_ip% vxlan_ip=%infra01_vxlan_ip% storage_ip=%infra01_storage_ip%
+                  infra02 management_ip=%infra02_management_ip% container_ip=%infra02_container_ip% vxlan_ip=%infra02_vxlan_ip% storage_ip=%infra02_storage_ip%
+                  infra03 management_ip=%infra03_management_ip% container_ip=%infra03_container_ip% vxlan_ip=%infra03_vxlan_ip% storage_ip=%infra03_storage_ip%
 
                   [logger]
                   logger01 management_ip=%logger01_management_ip% container_ip=%logger01_container_ip%
@@ -1040,6 +1040,9 @@ resources:
                   "%infra03_vxlan_ip%":         { get_attr: [ server_infra03, addresses,      { get_resource: vxlan_network }, 0, addr ] }
                   "%compute01_vxlan_ip%":       { get_attr: [ server_compute01, addresses,    { get_resource: vxlan_network }, 0, addr ] }
                   "%compute02_vxlan_ip%":       { get_attr: [ server_compute02, addresses,    { get_resource: vxlan_network }, 0, addr ] }
+                  "%infra01_storage_ip%":       { get_attr: [ server_infra01, addresses,      { get_resource: storage_network }, 0, addr ] }
+                  "%infra02_storage_ip%":       { get_attr: [ server_infra02, addresses,      { get_resource: storage_network }, 0, addr ] }
+                  "%infra03_storage_ip%":       { get_attr: [ server_infra03, addresses,      { get_resource: storage_network }, 0, addr ] }
                   "%compute01_storage_ip%":     { get_attr: [ server_compute01, addresses,    { get_resource: storage_network }, 0, addr ] }
                   "%compute02_storage_ip%":     { get_attr: [ server_compute02, addresses,    { get_resource: storage_network }, 0, addr ] }
                   "%block01_storage_ip%":       { get_attr: [ server_block01, addresses,      { get_resource: storage_network }, 0, addr ] }
@@ -1228,6 +1231,8 @@ resources:
             get_resource: container_network
         - network:
             get_resource: vxlan_network
+        - network:
+            get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: infrastructure_init }
 
@@ -1266,6 +1271,8 @@ resources:
             get_resource: container_network
         - network:
             get_resource: vxlan_network
+        - network:
+            get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: infrastructure_init }
 
@@ -1304,6 +1311,8 @@ resources:
             get_resource: container_network
         - network:
             get_resource: vxlan_network
+        - network:
+            get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: infrastructure_init }
 
@@ -2059,6 +2068,9 @@ outputs:
     value:
       str_replace:
         template: |
+          infra01      - %server_infra01_ip%
+          infra02      - %server_infra02_ip%
+          infra03      - %server_infra03_ip%
           compute01    - %server_compute01_ip%
           compute02    - %server_compute02_ip%
           block01      - %server_block01_ip%
@@ -2067,6 +2079,9 @@ outputs:
           object02     - %server_object02_ip%
           object03     - %server_object03_ip%
         params:
+          "%server_infra01_ip%":   { get_attr: [ server_infra01, addresses,     { get_resource: storage_network }, 0, addr ] }
+          "%server_infra02_ip%":   { get_attr: [ server_infra02, addresses,     { get_resource: storage_network }, 0, addr ] }
+          "%server_infra03_ip%":   { get_attr: [ server_infra03, addresses,     { get_resource: storage_network }, 0, addr ] }
           "%server_compute01_ip%": { get_attr: [ server_compute01, addresses,   { get_resource: storage_network }, 0, addr ] }
           "%server_compute02_ip%": { get_attr: [ server_compute02, addresses,   { get_resource: storage_network }, 0, addr ] }
           "%server_block01_ip%":   { get_attr: [ server_block01, addresses,     { get_resource: storage_network }, 0, addr ] }
