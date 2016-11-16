@@ -51,6 +51,11 @@ parameters:
     type: string
     label: RPC Management Network CIDR
     description: The management CIDR for the RPC cluster
+    default: 172.29.232.0/22
+  container_subnet_cidr:
+    type: string
+    label: RPC Container Network CIDR
+    description: The container CIDR for the RPC cluster
     default: 172.29.236.0/22
   vxlan_subnet_cidr:
     type: string
@@ -263,6 +268,49 @@ resources:
         get_resource: stack_router
       subnet:
         get_resource: management_subnet
+
+  # Create the container network
+  # The neutron L2 network for the Heat Stack container network
+  container_network:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-container-network"
+          params:
+            "%heat_stack_prefix%":
+              get_param: "OS::stack_id"
+            "%heat_stack_name%":
+              get_param: "OS::stack_name"
+
+  # The neutron subnet for the Heat Stack container network
+  container_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network:
+        get_resource: container_network
+      cidr:
+        get_param: container_subnet_cidr
+      dns_nameservers:
+        - 8.8.8.8
+        - 8.8.4.4
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-container-subnet"
+          params:
+            "%heat_stack_prefix%":
+              get_param: "OS::stack_id"
+            "%heat_stack_name%":
+              get_param: "OS::stack_name"
+
+  # Attach the container interface to router
+  container_router_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router:
+        get_resource: stack_router
+      subnet:
+        get_resource: container_subnet
 
   # Create the VxLAN network
   # The neutron L2 network for the Heat Stack vxlan network
@@ -897,28 +945,28 @@ resources:
                   deployment
 
                   [haproxy]
-                  haproxy management_ip=%haproxy_management_ip%
+                  haproxy management_ip=%haproxy_management_ip% container_ip=%haproxy_container_ip%
 
                   [infra]
-                  infra01 management_ip=%infra01_management_ip% vxlan_ip=%infra01_vxlan_ip%
-                  infra02 management_ip=%infra02_management_ip% vxlan_ip=%infra02_vxlan_ip%
-                  infra03 management_ip=%infra03_management_ip% vxlan_ip=%infra03_vxlan_ip%
+                  infra01 management_ip=%infra01_management_ip% container_ip=%infra01_container_ip% vxlan_ip=%infra01_vxlan_ip%
+                  infra02 management_ip=%infra02_management_ip% container_ip=%infra02_container_ip% vxlan_ip=%infra02_vxlan_ip%
+                  infra03 management_ip=%infra03_management_ip% container_ip=%infra03_container_ip% vxlan_ip=%infra03_vxlan_ip%
 
                   [logger]
-                  logger01 management_ip=%logger01_management_ip%
+                  logger01 management_ip=%logger01_management_ip% container_ip=%logger01_container_ip%
 
                   [compute]
-                  compute01 management_ip=%compute01_management_ip% vxlan_ip=%compute01_vxlan_ip% storage_ip=%compute01_storage_ip%
-                  compute02 management_ip=%compute02_management_ip% vxlan_ip=%compute02_vxlan_ip% storage_ip=%compute02_storage_ip%
+                  compute01 management_ip=%compute01_management_ip% container_ip=%compute01_container_ip% vxlan_ip=%compute01_vxlan_ip% storage_ip=%compute01_storage_ip%
+                  compute02 management_ip=%compute02_management_ip% container_ip=%compute02_container_ip% vxlan_ip=%compute02_vxlan_ip% storage_ip=%compute02_storage_ip%
 
                   [block]
-                  block01 management_ip=%block01_management_ip% storage_ip=%block01_storage_ip%
-                  block02 management_ip=%block02_management_ip% storage_ip=%block02_storage_ip%
+                  block01 management_ip=%block01_management_ip% container_ip=%block01_container_ip% storage_ip=%block01_storage_ip%
+                  block02 management_ip=%block02_management_ip% container_ip=%block02_container_ip% storage_ip=%block02_storage_ip%
 
                   [object]
-                  object01 management_ip=%object01_management_ip% storage_ip=%object01_storage_ip%
-                  object02 management_ip=%object02_management_ip% storage_ip=%object02_storage_ip%
-                  object03 management_ip=%object03_management_ip% storage_ip=%object03_storage_ip%
+                  object01 management_ip=%object01_management_ip% container_ip=%object01_container_ip% storage_ip=%object01_storage_ip%
+                  object02 management_ip=%object02_management_ip% container_ip=%object02_container_ip% storage_ip=%object02_storage_ip%
+                  object03 management_ip=%object03_management_ip% container_ip=%object03_container_ip% storage_ip=%object03_storage_ip%
 
                   [openstack:children]
                   haproxy
@@ -945,6 +993,18 @@ resources:
                   "%object01_management_ip%":   { get_attr: [ server_object01, addresses,     { get_resource: management_network }, 0, addr ] }
                   "%object02_management_ip%":   { get_attr: [ server_object02, addresses,     { get_resource: management_network }, 0, addr ] }
                   "%object03_management_ip%":   { get_attr: [ server_object03, addresses,     { get_resource: management_network }, 0, addr ] }
+                  "%haproxy_container_ip%":     { get_attr: [ server_haproxy, addresses,      { get_resource: container_network }, 0, addr ] }
+                  "%infra01_container_ip%":     { get_attr: [ server_infra01, addresses,      { get_resource: container_network }, 0, addr ] }
+                  "%infra02_container_ip%":     { get_attr: [ server_infra02, addresses,      { get_resource: container_network }, 0, addr ] }
+                  "%infra03_container_ip%":     { get_attr: [ server_infra03, addresses,      { get_resource: container_network }, 0, addr ] }
+                  "%logger01_container_ip%":    { get_attr: [ server_logger01, addresses,     { get_resource: container_network }, 0, addr ] }
+                  "%compute01_container_ip%":   { get_attr: [ server_compute01, addresses,    { get_resource: container_network }, 0, addr ] }
+                  "%compute02_container_ip%":   { get_attr: [ server_compute02, addresses,    { get_resource: container_network }, 0, addr ] }
+                  "%block01_container_ip%":     { get_attr: [ server_block01, addresses,      { get_resource: container_network }, 0, addr ] }
+                  "%block02_container_ip%":     { get_attr: [ server_block02, addresses,      { get_resource: container_network }, 0, addr ] }
+                  "%object01_container_ip%":    { get_attr: [ server_object01, addresses,     { get_resource: container_network }, 0, addr ] }
+                  "%object02_container_ip%":    { get_attr: [ server_object02, addresses,     { get_resource: container_network }, 0, addr ] }
+                  "%object03_container_ip%":    { get_attr: [ server_object03, addresses,     { get_resource: container_network }, 0, addr ] }
                   "%infra01_vxlan_ip%":         { get_attr: [ server_infra01, addresses,      { get_resource: vxlan_network }, 0, addr ] }
                   "%infra02_vxlan_ip%":         { get_attr: [ server_infra02, addresses,      { get_resource: vxlan_network }, 0, addr ] }
                   "%infra03_vxlan_ip%":         { get_attr: [ server_infra03, addresses,      { get_resource: vxlan_network }, 0, addr ] }
@@ -1062,6 +1122,8 @@ resources:
       networks:
         - network:
             get_resource: management_network
+        - network:
+            get_resource: container_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: deployment_init }
 
@@ -1096,6 +1158,8 @@ resources:
       networks:
         - network:
             get_resource: management_network
+        - network:
+            get_resource: container_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: haproxy_init }
 
@@ -1130,6 +1194,8 @@ resources:
       networks:
         - network:
             get_resource: management_network
+        - network:
+            get_resource: container_network
         - network:
             get_resource: vxlan_network
       user_data_format: SOFTWARE_CONFIG
@@ -1167,6 +1233,8 @@ resources:
         - network:
             get_resource: management_network
         - network:
+            get_resource: container_network
+        - network:
             get_resource: vxlan_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: infrastructure_init }
@@ -1203,6 +1271,8 @@ resources:
         - network:
             get_resource: management_network
         - network:
+            get_resource: container_network
+        - network:
             get_resource: vxlan_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: infrastructure_init }
@@ -1238,6 +1308,8 @@ resources:
       networks:
         - network:
             get_resource: management_network
+        - network:
+            get_resource: container_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: logger_init }
 
@@ -1272,6 +1344,8 @@ resources:
       networks:
         - network:
             get_resource: management_network
+        - network:
+            get_resource: container_network
         - network:
             get_resource: vxlan_network
         - network:
@@ -1311,6 +1385,8 @@ resources:
         - network:
             get_resource: management_network
         - network:
+            get_resource: container_network
+        - network:
             get_resource: vxlan_network
         - network:
             get_resource: storage_network
@@ -1348,6 +1424,8 @@ resources:
       networks:
         - network:
             get_resource: management_network
+        - network:
+            get_resource: container_network
         - network:
             get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
@@ -1396,6 +1474,8 @@ resources:
         - network:
             get_resource: management_network
         - network:
+            get_resource: container_network
+        - network:
             get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: block_init }
@@ -1441,6 +1521,8 @@ resources:
       networks:
         - network:
             get_resource: management_network
+        - network:
+            get_resource: container_network
         - network:
             get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
@@ -1507,6 +1589,8 @@ resources:
         - network:
             get_resource: management_network
         - network:
+            get_resource: container_network
+        - network:
             get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: object_init }
@@ -1571,6 +1655,8 @@ resources:
         - network:
             get_resource: management_network
         - network:
+            get_resource: container_network
+        - network:
             get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
       user_data: { get_resource: object_init }
@@ -1620,6 +1706,12 @@ resources:
           type: String
         - name: rpc_heat_ansible_branch
           description: RPC Heat Ansible Git Branch/Tag
+          type: String
+        - name: deployment_management_ip
+          description: Management IP for Deployment Server
+          type: String
+        - name: deployment_container_ip
+          description: Container IP for Deployment Server
           type: String
       config: |
         #!/bin/bash
@@ -1727,12 +1819,12 @@ resources:
         ./scripts/bootstrap-ansible.sh || exit_failure "Failed to execute bootstrap-ansible.sh"
         popd
 
-        # Run Prepare Ansible Tags
+        # Run Deployment Ansible Tags
         pushd /opt/rpc-heat-ansible/playbooks/
-        ansible-playbook -v -i /opt/rpc-on-rpc/inventory -t prepare rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
+        ansible-playbook -v -i /opt/rpc-on-rpc/inventory -t deployment --extra-vars "deployment_management_ip=$deployment_management_ip deployment_container_ip=$deployment_container_ip" rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
 
-        # Run Reboot Ansible Tags
-        ansible-playbook -v -i /opt/rpc-on-rpc/inventory -t reboot rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
+        # Run Prepare Ansible Tags
+        ansible-playbook -v -i /opt/rpc-on-rpc/inventory -t prepare rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
         popd
 
         exit_success
@@ -1750,6 +1842,10 @@ resources:
           get_param: rpc_heat_ansible_repo
         rpc_heat_ansible_branch:
           get_param: rpc_heat_ansible_branch
+        deployment_management_ip:
+          get_attr: [ server_deployment, addresses,  { get_resource: management_network }, 0, addr ]
+        deployment_container_ip:
+          get_attr: [ server_deployment, addresses,  { get_resource: container_network }, 0, addr ]
       config:
         get_resource: rpc_host_ansible_config
       server:
@@ -1876,6 +1972,38 @@ outputs:
           "%server_object01_ip%":  { get_attr: [ server_object01, addresses,    { get_resource: management_network }, 0, addr ] }
           "%server_object02_ip%":  { get_attr: [ server_object02, addresses,    { get_resource: management_network }, 0, addr ] }
           "%server_object03_ip%":  { get_attr: [ server_object03, addresses,    { get_resource: management_network }, 0, addr ] }
+
+  # All Stack Server Container IPs
+  container_ips:
+    description: All Container IPs
+    value:
+      str_replace:
+        template: |
+          deployment   - %server_deployment_ip%
+          haproxy      - %server_haproxy_ip%
+          infra01      - %server_infra01_ip%
+          infra02      - %server_infra02_ip%
+          infra03      - %server_infra03_ip%
+          compute01    - %server_compute01_ip%
+          compute02    - %server_compute02_ip%
+          block01      - %server_block01_ip%
+          block02      - %server_block02_ip%
+          object01     - %server_object01_ip%
+          object02     - %server_object02_ip%
+          object03     - %server_object03_ip%
+        params:
+          "%server_deployment%":   { get_attr: [ server_deployment, addresses,  { get_resource: container_network }, 0, addr ] }
+          "%server_haproxy_ip%":   { get_attr: [ server_haproxy, addresses,     { get_resource: container_network }, 0, addr ] }
+          "%server_infra01_ip%":   { get_attr: [ server_infra01, addresses,     { get_resource: container_network }, 0, addr ] }
+          "%server_infra02_ip%":   { get_attr: [ server_infra02, addresses,     { get_resource: container_network }, 0, addr ] }
+          "%server_infra03_ip%":   { get_attr: [ server_infra03, addresses,     { get_resource: container_network }, 0, addr ] }
+          "%server_compute01_ip%": { get_attr: [ server_compute01, addresses,   { get_resource: container_network }, 0, addr ] }
+          "%server_compute02_ip%": { get_attr: [ server_compute02, addresses,   { get_resource: container_network }, 0, addr ] }
+          "%server_block01_ip%":   { get_attr: [ server_block01, addresses,     { get_resource: container_network }, 0, addr ] }
+          "%server_block02_ip%":   { get_attr: [ server_block02, addresses,     { get_resource: container_network }, 0, addr ] }
+          "%server_object01_ip%":  { get_attr: [ server_object01, addresses,    { get_resource: container_network }, 0, addr ] }
+          "%server_object02_ip%":  { get_attr: [ server_object02, addresses,    { get_resource: container_network }, 0, addr ] }
+          "%server_object03_ip%":  { get_attr: [ server_object03, addresses,    { get_resource: container_network }, 0, addr ] }
 
   # All Stack Server VxLAN IPs
   vxlan_ips:

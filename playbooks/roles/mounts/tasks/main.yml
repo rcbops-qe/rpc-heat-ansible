@@ -19,3 +19,7 @@
     state: mounted
     fstype: xfs
   with_items: '{{ swift_config.drives }}'
+
+- name: Wipe Swift drives
+  shell: "rm -rf {{ swift_config.mount_point }}/{{ item.name }}/*"
+  with_items: '{{ swift_config.drives }}'

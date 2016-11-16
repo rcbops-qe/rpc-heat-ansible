@@ -1,0 +1,6 @@
+---
+- name: Add IPs to inventory file for Deployment host
+  lineinfile:
+    dest: /opt/rpc-on-rpc/inventory
+    regexp: '^deployment$'
+    line: 'deployment management_ip={{ deployment_management_ip }} container_ip={{ deployment_container_ip }}'
