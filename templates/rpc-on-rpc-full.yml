@@ -67,11 +67,41 @@ parameters:
     label: RPC Storage network CIDR
     description: The Storage network CIDR for the RPC cluster
     default: 172.29.244.0/22
-  root_volume_size:
+  deployment_root_volume_size:
     type: number
-    label: root volume size
-    description: The size in GB of root volume for the servers
-    default: 25
+    label: deployment server root volume size
+    description: The size in GB of the deployment server root volume for the servers
+    default: 10
+  haproxy_root_volume_size:
+    type: number
+    label: haproxy server root volume size
+    description: The size in GB of the haproxy server root volume for the servers
+    default: 10
+  infra_root_volume_size:
+    type: number
+    label: infra server root volume size
+    description: The size in GB of the infra server root volume for the servers
+    default: 50
+  logger_root_volume_size:
+    type: number
+    label: logger server root volume size
+    description: The size in GB of the logger server root volume for the servers
+    default: 50
+  compute_root_volume_size:
+    type: number
+    label: compute server root volume size
+    description: The size in GB of the compute server root volume for the servers
+    default: 10
+  block_root_volume_size:
+    type: number
+    label: block server root volume size
+    description: The size in GB of the block server root volume for the servers
+    default: 5
+  object_root_volume_size:
+    type: number
+    label: object server root volume size
+    description: The size in GB of the object server root volume for the servers
+    default: 5
   root_volume_type:
     type: string
     label: type of volume for server root volume
@@ -416,7 +446,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: deployment_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -437,7 +467,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: haproxy_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -458,7 +488,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: infra_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -479,7 +509,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: infra_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -500,7 +530,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: infra_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -521,7 +551,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: logger_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -542,7 +572,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: compute_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -563,7 +593,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: compute_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -584,7 +614,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: block_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -605,7 +635,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: block_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -626,7 +656,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: object_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -647,7 +677,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: object_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -668,7 +698,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: root_volume_size
+        get_param: object_root_volume_size
       volume_type:
         get_param: root_volume_type
 
