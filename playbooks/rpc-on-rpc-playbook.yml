@@ -1,5 +1,12 @@
 ---
 # This playbook installs Rackspace Private Cloud v13.1
+- name: Set Deployment Host Vars
+  hosts: deployment
+  tags:
+    - deployment
+  roles:
+    - deployment
+
 - name: Install Packages
   hosts: all
   tags:
@@ -33,7 +40,7 @@
     - mounts
 
 - name: Setup Networking
-  hosts: openstack
+  hosts: all
   tags:
     - prepare
     - networking

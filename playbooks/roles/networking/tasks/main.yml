@@ -48,3 +48,6 @@
     src: rpc-on-rpc.j2
     dest: /etc/network/interfaces.d/rpc-on-rpc.cfg
     mode: 0644
+
+- name: Bring up all interfaces
+  shell: ifup -a
