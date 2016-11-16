@@ -1,21 +1,20 @@
 ---
 # This playbook installs Rackspace Private Cloud v13.1
-
-- name: Do Nothing
+- name: Install Packages
   hosts: all
-  tags:
-    - prepare
-  tasks:
-    - name: Ping Nodes
-      ping:
-
-- name: Prepare Environment
-  hosts: all:!deployment
   tags:
     - prepare
     - packages
   roles:
     - packages
+
+- name: Setup Host Files
+  hosts: all
+  tags:
+    - prepare
+    - hosts
+  roles:
+    - hosts
 
 - name: Setup Cinder Volume Groups
   hosts: block
@@ -34,7 +33,7 @@
     - mounts
 
 - name: Setup Networking
-  hosts: all:!deployment
+  hosts: openstack
   tags:
     - prepare
     - networking
@@ -50,7 +49,7 @@
     - configure-rpc
 
 - name: Reboot Cluster
-  hosts: all:!deployment
+  hosts: openstack
   tags:
     - reboot
   roles:

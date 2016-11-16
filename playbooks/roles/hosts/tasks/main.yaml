@@ -1,0 +1,20 @@
+---
+- name: Add root public key to authorized keys on all hosts
+  authorized_key: user=root key="{{ lookup('file', '/root/.ssh/id_rsa.pub') }}"
+
+- name: Add Nodes Hosts File Entries (Prefix)
+  lineinfile: dest=/etc/hosts line='{{ hostvars[item].management_ip }} {{ heat_stack_prefix|string }}-{{ item }}' insertafter=EOF state=present
+  with_items: groups.openstack
+
+- name: Add Nodes Hosts File Entries (Short)
+  lineinfile: dest=/etc/hosts line='{{ hostvars[item].management_ip }} {{ item }}' insertafter=EOF state=present
+  with_items: groups.openstack
+
+- name: Add Nodes Hosts File Entries (Full)
+  lineinfile: dest=/etc/hosts line='{{ hostvars[item].management_ip }} {{ heat_stack_name|string }}-{{ heat_stack_id|string }}-{{ item }}' insertafter=EOF state=present
+  with_items: groups.openstack
+
+- name: Check Connectivity
+  command: fping {{ item }}
+  changed_when: False
+  with_items: groups.openstack

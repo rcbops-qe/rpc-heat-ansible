@@ -874,7 +874,7 @@ resources:
                   heat_stack_id=%heat_stack_id%
                   heat_stack_name=%heat_stack_name%
                   heat_stack_password=%heat_stack_password%
-                  heat_stack_prefix=%heat_stack_name%-%heat_stack_id%
+                  heat_stack_prefix=%heat_stack_name%
                   rpc_branch=%rpc_branch%
                   deploy_retries=%deploy_retries%
 
@@ -919,6 +919,14 @@ resources:
                   object01 management_ip=%object01_management_ip% storage_ip=%object01_storage_ip%
                   object02 management_ip=%object02_management_ip% storage_ip=%object02_storage_ip%
                   object03 management_ip=%object03_management_ip% storage_ip=%object03_storage_ip%
+
+                  [openstack:children]
+                  haproxy
+                  infra
+                  logger
+                  compute
+                  block
+                  object
                 params:
                   "%heat_stack_id%":            { get_param: "OS::stack_id" }
                   "%heat_stack_name%":          { get_param: "OS::stack_name" }
@@ -1619,6 +1627,9 @@ resources:
         set -e
         set -x
 
+        # Set Ansible FORKS
+        export FORKS=10
+
         logdir=/var/log/heat-deployments
         prefix=${logdir}/config-rpc-software
 
@@ -1770,8 +1781,11 @@ resources:
         set -e
         set -x
 
-        logdir=/var/log/heat-deployments
-        prefix=${logdir}/config-rpc-software
+        # Set RPC deploy.sh bash environment variables
+        export DEPLOY_TEMPEST="yes"
+        export DEPLOY_HAPROXY="yes"
+        export DEPLOY_MAAS="no"
+        export FORKS=15
 
         function exit_failure {
           echo "FAILURE: '$@'"
@@ -1783,7 +1797,19 @@ resources:
           exit 0
         }
 
+        logdir=/var/log/heat-deployments
+        prefix=${logdir}/rpc-software-deploy
+
+        # Set log file
+        mkdir -p $logdir
+        exec &> >(tee -a ${prefix}.log)
+        [ -e ${prefix}.ran ] && exit 0
+        chmod -R 0600 ${logdir}
+
         echo "Deploy RPC Software"
+        pushd /opt/rpc-openstack/
+        ./scripts/deploy.sh || exit_failure "RPC deploy.sh Failure"
+        popd
 
         exit_success
 
