@@ -51,3 +51,8 @@
 
 - name: Bring up all interfaces
   shell: ifup -a
+
+- name: Check Connectivity
+  command: fping 172.29.236.{{ hostvars[item].node_id }}
+  changed_when: False
+  with_items: groups.all

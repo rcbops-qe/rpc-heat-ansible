@@ -18,6 +18,7 @@ install:
    - tcpdump
    - vim
    - vlan
+   - ifenslave
    - python-apt
    - python-dev
    - tmux
@@ -25,3 +26,4 @@ install:
    - libssl-dev
    - lvm2
    - fping
+   - openssh-server
