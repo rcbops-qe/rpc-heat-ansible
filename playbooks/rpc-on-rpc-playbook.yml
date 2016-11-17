@@ -1,7 +1,7 @@
 ---
-# This playbook installs Rackspace Private Cloud v13.1
+# RPC-on-RPC Host Setup Playbook
 - name: Set Deployment Host Vars
-  hosts: deployment
+  hosts: infra01
   tags:
     - deployment
   roles:
@@ -48,16 +48,9 @@
     - networking
 
 - name: Setup Rackspace Private Cloud Configuration
-  hosts: deployment
+  hosts: infra01
   tags:
     - prepare
     - configure-rpc
   roles:
     - configure-rpc
-
-- name: Reboot Cluster
-  hosts: openstack
-  tags:
-    - reboot
-  roles:
-    - reboot
