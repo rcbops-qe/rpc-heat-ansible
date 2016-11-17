@@ -40,7 +40,7 @@ iface br-vxlan inet static
 {% endif %}
 
 {% if storage_ip is defined %}
-{% if inventory_hostname in groups.compute %}
+{% if inventory_hostname in groups.infra or inventory_hostname in groups.compute %}
 auto eth3
 iface eth3 inet manual
     up ip link set $IFACE up
