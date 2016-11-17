@@ -67,11 +67,6 @@ parameters:
     label: RPC Storage network CIDR
     description: The Storage network CIDR for the RPC cluster
     default: 172.29.244.0/22
-  deployment_root_volume_size:
-    type: number
-    label: deployment server root volume size
-    description: The size in GB of the deployment server root volume for the servers
-    default: 10
   haproxy_root_volume_size:
     type: number
     label: haproxy server root volume size
@@ -149,11 +144,6 @@ parameters:
     label: Cluster Availability Zone
     description: The Availability Zone to deploy the cluster inventory
     default: 'nova'
-  deployment_flavor:
-    type: string
-    label: Deployment Node Flavor
-    description: The flavor for the deployment node
-    default: rpc.small
   haproxy_flavor:
     type: string
     label: HAProxy Node Flavor
@@ -428,27 +418,6 @@ resources:
   #  properties:
   #    floatingip_id: { get_resource: floating_ip }
   #    port_id: { get_attr: [ server_infra01, addresses, { get_resource: management_network }, 0, port ] }
-
-  # Create root volume for deployment
-  root_volume_deployment:
-    type: OS::Cinder::Volume
-    properties:
-      availability_zone:
-        get_param: availability_zone
-      name:
-        str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-deployment-root"
-          params:
-            "%heat_stack_prefix%":
-              get_param: "OS::stack_id"
-            "%heat_stack_name%":
-              get_param: "OS::stack_name"
-      image:
-        get_param: server_image
-      size:
-        get_param: deployment_root_volume_size
-      volume_type:
-        get_param: root_volume_type
 
   # Create root volume for haproxy server
   root_volume_haproxy:
@@ -957,9 +926,8 @@ resources:
                   deploy_retries=%deploy_retries%
 
                   [all]
-                  deployment   ansible_connection=local
                   haproxy      ansible_ssh_host=%haproxy_management_ip%
-                  infra01      ansible_ssh_host=%infra01_management_ip%
+                  infra01      ansible_connection=local
                   infra02      ansible_ssh_host=%infra02_management_ip%
                   infra03      ansible_ssh_host=%infra03_management_ip%
                   logger01     ansible_ssh_host=%logger01_management_ip%
@@ -971,14 +939,11 @@ resources:
                   object02     ansible_ssh_host=%object02_management_ip%
                   object03     ansible_ssh_host=%object03_management_ip%
 
-                  [deployment]
-                  deployment
-
                   [haproxy]
                   haproxy management_ip=%haproxy_management_ip% container_ip=%haproxy_container_ip%
 
                   [infra]
-                  infra01 management_ip=%infra01_management_ip% container_ip=%infra01_container_ip% vxlan_ip=%infra01_vxlan_ip% storage_ip=%infra01_storage_ip%
+                  infra01
                   infra02 management_ip=%infra02_management_ip% container_ip=%infra02_container_ip% vxlan_ip=%infra02_vxlan_ip% storage_ip=%infra02_storage_ip%
                   infra03 management_ip=%infra03_management_ip% container_ip=%infra03_container_ip% vxlan_ip=%infra03_vxlan_ip% storage_ip=%infra03_storage_ip%
 
@@ -1012,7 +977,6 @@ resources:
                   "%rpc_branch%":               { get_param: "rpc_branch" }
                   "%deploy_retries%":           { get_param: "deploy_retries" }
                   "%haproxy_management_ip%":    { get_attr: [ server_haproxy, addresses,      { get_resource: management_network }, 0, addr ] }
-                  "%infra01_management_ip%":    { get_attr: [ server_infra01, addresses,      { get_resource: management_network }, 0, addr ] }
                   "%infra02_management_ip%":    { get_attr: [ server_infra02, addresses,      { get_resource: management_network }, 0, addr ] }
                   "%infra03_management_ip%":    { get_attr: [ server_infra03, addresses,      { get_resource: management_network }, 0, addr ] }
                   "%logger01_management_ip%":   { get_attr: [ server_logger01, addresses,     { get_resource: management_network }, 0, addr ] }
@@ -1024,7 +988,6 @@ resources:
                   "%object02_management_ip%":   { get_attr: [ server_object02, addresses,     { get_resource: management_network }, 0, addr ] }
                   "%object03_management_ip%":   { get_attr: [ server_object03, addresses,     { get_resource: management_network }, 0, addr ] }
                   "%haproxy_container_ip%":     { get_attr: [ server_haproxy, addresses,      { get_resource: container_network }, 0, addr ] }
-                  "%infra01_container_ip%":     { get_attr: [ server_infra01, addresses,      { get_resource: container_network }, 0, addr ] }
                   "%infra02_container_ip%":     { get_attr: [ server_infra02, addresses,      { get_resource: container_network }, 0, addr ] }
                   "%infra03_container_ip%":     { get_attr: [ server_infra03, addresses,      { get_resource: container_network }, 0, addr ] }
                   "%logger01_container_ip%":    { get_attr: [ server_logger01, addresses,     { get_resource: container_network }, 0, addr ] }
@@ -1035,12 +998,10 @@ resources:
                   "%object01_container_ip%":    { get_attr: [ server_object01, addresses,     { get_resource: container_network }, 0, addr ] }
                   "%object02_container_ip%":    { get_attr: [ server_object02, addresses,     { get_resource: container_network }, 0, addr ] }
                   "%object03_container_ip%":    { get_attr: [ server_object03, addresses,     { get_resource: container_network }, 0, addr ] }
-                  "%infra01_vxlan_ip%":         { get_attr: [ server_infra01, addresses,      { get_resource: vxlan_network }, 0, addr ] }
                   "%infra02_vxlan_ip%":         { get_attr: [ server_infra02, addresses,      { get_resource: vxlan_network }, 0, addr ] }
                   "%infra03_vxlan_ip%":         { get_attr: [ server_infra03, addresses,      { get_resource: vxlan_network }, 0, addr ] }
                   "%compute01_vxlan_ip%":       { get_attr: [ server_compute01, addresses,    { get_resource: vxlan_network }, 0, addr ] }
                   "%compute02_vxlan_ip%":       { get_attr: [ server_compute02, addresses,    { get_resource: vxlan_network }, 0, addr ] }
-                  "%infra01_storage_ip%":       { get_attr: [ server_infra01, addresses,      { get_resource: storage_network }, 0, addr ] }
                   "%infra02_storage_ip%":       { get_attr: [ server_infra02, addresses,      { get_resource: storage_network }, 0, addr ] }
                   "%infra03_storage_ip%":       { get_attr: [ server_infra03, addresses,      { get_resource: storage_network }, 0, addr ] }
                   "%compute01_storage_ip%":     { get_attr: [ server_compute01, addresses,    { get_resource: storage_network }, 0, addr ] }
@@ -1124,42 +1085,6 @@ resources:
 
   ### Creation of all Servers ###
 
-  # Create Deployment Server
-  server_deployment:
-    type: OS::Nova::Server
-    properties:
-      availability_zone:
-        get_param: availability_zone
-      flavor:
-        get_param: deployment_flavor
-      admin_pass:
-        get_attr: [ password, value ]
-      block_device_mapping:
-        - device_name: vda
-          volume_id:
-            get_resource: root_volume_deployment
-          delete_on_termination: true
-      config_drive: True
-      security_groups:
-        - get_resource: security_group
-      key_name:
-        get_param: ssh_user_key
-      name:
-        str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-deployment"
-          params:
-            "%heat_stack_prefix%" :
-              get_param: "OS::stack_id"
-            "%heat_stack_name%" :
-              get_param: "OS::stack_name"
-      networks:
-        - network:
-            get_resource: management_network
-        - network:
-            get_resource: container_network
-      user_data_format: SOFTWARE_CONFIG
-      user_data: { get_resource: deployment_init }
-
   # Create HAProxy Server
   server_haproxy:
     type: OS::Nova::Server
@@ -1215,7 +1140,7 @@ resources:
       security_groups:
         - get_resource: security_group
       key_name:
-        get_resource: keypair
+        get_param: ssh_user_key
       name:
         str_replace:
           template: "%heat_stack_name%-%heat_stack_prefix%-infra01"
@@ -1234,7 +1159,7 @@ resources:
         - network:
             get_resource: storage_network
       user_data_format: SOFTWARE_CONFIG
-      user_data: { get_resource: infrastructure_init }
+      user_data: { get_resource: deployment_init }
 
   # Create Infra 02 Server
   server_infra02:
@@ -1746,11 +1671,17 @@ resources:
         - name: rpc_heat_ansible_branch
           description: RPC Heat Ansible Git Branch/Tag
           type: String
-        - name: deployment_management_ip
-          description: Management IP for Deployment Server
+        - name: infra01_management_ip
+          description: Management IP for infra01 Server
           type: String
-        - name: deployment_container_ip
-          description: Container IP for Deployment Server
+        - name: infra01_container_ip
+          description: Container IP for infra01 Server
+          type: String
+        - name: infra01_vxlan_ip
+          description: VxLan IP for infra01 Server
+          type: String
+        - name: infra01_storage_ip
+          description: Storage IP for infra01 Server
           type: String
       config: |
         #!/bin/bash
@@ -1860,7 +1791,7 @@ resources:
 
         # Run Deployment Ansible Tags
         pushd /opt/rpc-heat-ansible/playbooks/
-        ansible-playbook -v -i /opt/rpc-on-rpc/inventory -t deployment --extra-vars "deployment_management_ip=$deployment_management_ip deployment_container_ip=$deployment_container_ip" rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
+        ansible-playbook -v -i /opt/rpc-on-rpc/inventory -t deployment --extra-vars "infra01_management_ip=$infra01_management_ip infra01_container_ip=$infra01_container_ip infra01_vxlan_ip=$infra01_vxlan_ip infra01_storage_ip=$infra01_storage_ip" rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
 
         # Run Prepare Ansible Tags
         ansible-playbook -v -i /opt/rpc-on-rpc/inventory -t prepare rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
@@ -1881,18 +1812,20 @@ resources:
           get_param: rpc_heat_ansible_repo
         rpc_heat_ansible_branch:
           get_param: rpc_heat_ansible_branch
-        deployment_management_ip:
-          get_attr: [ server_deployment, addresses,  { get_resource: management_network }, 0, addr ]
-        deployment_container_ip:
-          get_attr: [ server_deployment, addresses,  { get_resource: container_network }, 0, addr ]
+        infra01_management_ip:
+          get_attr: [ server_infra01, addresses,  { get_resource: management_network }, 0, addr ]
+        infra01_container_ip:
+          get_attr: [ server_infra01, addresses,  { get_resource: container_network }, 0, addr ]
+        infra01_vxlan_ip:
+          get_attr: [ server_infra01, addresses,  { get_resource: vxlan_network }, 0, addr ]
+        infra01_storage_ip:
+          get_attr: [ server_infra01, addresses,  { get_resource: storage_network }, 0, addr ]
       config:
         get_resource: rpc_host_ansible_config
       server:
-        get_resource: server_deployment
+        get_resource: server_infra01
     depends_on:
-      - server_deployment
       - server_haproxy
-      - server_infra01
       - server_infra02
       - server_infra03
       - server_compute01
@@ -1955,7 +1888,7 @@ resources:
       config:
         get_resource: rpc_software_deploy_config
       server:
-        get_resource: server_deployment
+        get_resource: server_infra01
     depends_on:
       - rpc_host_ansible_deploy
 
@@ -1968,17 +1901,11 @@ outputs:
     value:
       get_attr: [ password, value ]
 
-  # Deployment (deployment host) Management IP
+  # Infra01 Management IP
   server_deployment_private_ip:
-    description: Deployment Management IP
+    description: Infra01 Management IP
     value:
-      get_attr: [ server_deployment, addresses, { get_resource: management_network }, 0, addr ]
-
-  # Infra01 (deployment host) Floating IP
-  #server_infra01_floating_ip:
-  #  description: Infra01 Floating IP
-  #  value:
-  #     get_attr: [ floating_ip, floating_ip_address ]
+      get_attr: [ server_infra01, addresses, { get_resource: management_network }, 0, addr ]
 
   # All Stack Server Management IPs
   management_ips:
@@ -1986,7 +1913,6 @@ outputs:
     value:
       str_replace:
         template: |
-          deployment   - %server_deployment_ip%
           haproxy      - %server_haproxy_ip%
           infra01      - %server_infra01_ip%
           infra02      - %server_infra02_ip%
@@ -1999,7 +1925,6 @@ outputs:
           object02     - %server_object02_ip%
           object03     - %server_object03_ip%
         params:
-          "%server_deployment%":   { get_attr: [ server_deployment, addresses,  { get_resource: management_network }, 0, addr ] }
           "%server_haproxy_ip%":   { get_attr: [ server_haproxy, addresses,     { get_resource: management_network }, 0, addr ] }
           "%server_infra01_ip%":   { get_attr: [ server_infra01, addresses,     { get_resource: management_network }, 0, addr ] }
           "%server_infra02_ip%":   { get_attr: [ server_infra02, addresses,     { get_resource: management_network }, 0, addr ] }
@@ -2018,7 +1943,6 @@ outputs:
     value:
       str_replace:
         template: |
-          deployment   - %server_deployment_ip%
           haproxy      - %server_haproxy_ip%
           infra01      - %server_infra01_ip%
           infra02      - %server_infra02_ip%
@@ -2031,7 +1955,6 @@ outputs:
           object02     - %server_object02_ip%
           object03     - %server_object03_ip%
         params:
-          "%server_deployment%":   { get_attr: [ server_deployment, addresses,  { get_resource: container_network }, 0, addr ] }
           "%server_haproxy_ip%":   { get_attr: [ server_haproxy, addresses,     { get_resource: container_network }, 0, addr ] }
           "%server_infra01_ip%":   { get_attr: [ server_infra01, addresses,     { get_resource: container_network }, 0, addr ] }
           "%server_infra02_ip%":   { get_attr: [ server_infra02, addresses,     { get_resource: container_network }, 0, addr ] }

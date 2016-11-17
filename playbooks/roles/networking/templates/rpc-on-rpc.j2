@@ -2,10 +2,6 @@
 auto lo
 iface lo inet loopback
 
-# Interface - eth0
-auto eth0
-iface eth0 inet dhcp
-
 {% if container_ip is defined %}
 auto eth1
 iface eth1 inet manual
