@@ -10,8 +10,8 @@ used_ips:
   - 172.29.244.1,172.29.244.50
 
 global_overrides:
-  internal_lb_vip_address: {{ hostvars[ groups.haproxy|first ].management_ip }}
-  external_lb_vip_address: {{ hostvars[ groups.haproxy|first ].management_ip }}
+  internal_lb_vip_address: 172.29.236.{{ hostvars[ groups.infra|first ].node_id }}
+  external_lb_vip_address: {{ hostvars[ groups.infra|first ].ansible_eth0.ipv4.address }}
   tunnel_bridge: "br-vxlan"
   management_bridge: "br-mgmt"
   provider_networks:
@@ -52,12 +52,32 @@ global_overrides:
         type: "vxlan"
         range: "1:1000"
         net_name: "vxlan"
+    - network:
+        group_binds:
+          - neutron_linuxbridge_agent
+        container_bridge: "br-vlan"
+        container_type: "veth"
+        container_interface: "eth11"
+        container_mtu: "1450"
+        type: "vlan"
+        range: "101:200"
+        net_name: "vlan"
+    - network:
+        group_binds:
+          - neutron_linuxbridge_agent
+        container_bridge: "br-vlan"
+        container_type: "veth"
+        container_interface: "eth12"
+        container_mtu: "1450"
+        host_bind_override: "eth12"
+        type: "flat"
+        net_name: "flat"
 
 {% if groups.infra|length > 0 %}
 shared-infra_hosts:
 {% for host in groups.infra %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
 {% endfor %}
 {% endif %}
 
@@ -65,7 +85,7 @@ shared-infra_hosts:
 os-infra_hosts:
 {% for host in groups.infra %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
 {% endfor %}
 {% endif %}
 
@@ -73,7 +93,7 @@ os-infra_hosts:
 storage-infra_hosts:
 {% for host in groups.infra %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
 {% endfor %}
 {% endif %}
 
@@ -81,7 +101,7 @@ storage-infra_hosts:
 repo-infra_hosts:
 {% for host in groups.infra %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
 {% endfor %}
 {% endif %}
 
@@ -89,7 +109,7 @@ repo-infra_hosts:
 identity_hosts:
 {% for host in groups.infra %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
 {% endfor %}
 {% endif %}
 
@@ -97,7 +117,7 @@ identity_hosts:
 network_hosts:
 {% for host in groups.infra %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
 {% endfor %}
 {% endif %}
 
@@ -105,7 +125,7 @@ network_hosts:
 compute_hosts:
 {% for host in groups.compute %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
 {% endfor %}
 {% endif %}
 
@@ -113,7 +133,7 @@ compute_hosts:
 storage_hosts:
 {% for host in groups.block %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
     container_vars:
       cinder_backends:
         limit_container_types: cinder_volume
@@ -128,10 +148,10 @@ storage_hosts:
 log_hosts:
 {% for host in groups.logger %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
 {% endfor %}
 {% endif %}
 
 haproxy_hosts:
-  {{ heat_stack_prefix|string }}-{{ groups.haproxy|first }}:
-    ip: {{ hostvars[ groups.haproxy|first ].management_ip }}
+  {{ heat_stack_prefix|string }}-{{ groups.infra|first }}:
+    ip: 172.29.236.{{ hostvars[ groups.infra|first ].node_id }}

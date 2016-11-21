@@ -3,18 +3,18 @@
   authorized_key: user=root key="{{ lookup('file', '/root/.ssh/id_rsa.pub') }}"
 
 - name: Add Nodes Hosts File Entries (Prefix)
-  lineinfile: dest=/etc/hosts line='{{ hostvars[item].management_ip }} {{ heat_stack_prefix|string }}-{{ item }}' insertafter=EOF state=present
-  with_items: groups.openstack
+  lineinfile: dest=/etc/hosts line='{{ hostvars[item].ansible_eth0.ipv4.address }} {{ heat_stack_prefix|string }}-{{ item }}' insertafter=EOF state=present
+  with_items: groups.all
 
 - name: Add Nodes Hosts File Entries (Short)
-  lineinfile: dest=/etc/hosts line='{{ hostvars[item].management_ip }} {{ item }}' insertafter=EOF state=present
-  with_items: groups.openstack
+  lineinfile: dest=/etc/hosts line='{{ hostvars[item].ansible_eth0.ipv4.address }} {{ item }}' insertafter=EOF state=present
+  with_items: groups.all
 
 - name: Add Nodes Hosts File Entries (Full)
-  lineinfile: dest=/etc/hosts line='{{ hostvars[item].management_ip }} {{ heat_stack_name|string }}-{{ heat_stack_id|string }}-{{ item }}' insertafter=EOF state=present
-  with_items: groups.openstack
+  lineinfile: dest=/etc/hosts line='{{ hostvars[item].ansible_eth0.ipv4.address }} {{ heat_stack_name|string }}-{{ heat_stack_id|string }}-{{ item }}' insertafter=EOF state=present
+  with_items: groups.all
 
 - name: Check Connectivity
   command: fping {{ item }}
   changed_when: False
-  with_items: groups.openstack
+  with_items: groups.all

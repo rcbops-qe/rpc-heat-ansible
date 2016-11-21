@@ -1,12 +1,5 @@
 ---
 # RPC-on-RPC Host Setup Playbook
-- name: Set Deployment Host Vars
-  hosts: infra01
-  tags:
-    - deployment
-  roles:
-    - deployment
-
 - name: Install Packages
   hosts: all
   tags:
@@ -48,7 +41,7 @@
     - networking
 
 - name: Setup Rackspace Private Cloud Configuration
-  hosts: infra01
+  hosts: deployment
   tags:
     - prepare
     - configure-rpc

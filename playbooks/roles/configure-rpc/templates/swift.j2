@@ -22,7 +22,7 @@ global_overrides:
 swift-proxy_hosts:
 {% for host in groups.infra %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
 {% endfor %}
 {% endif %}
 
@@ -30,6 +30,6 @@ swift-proxy_hosts:
 swift_hosts:
 {% for host in groups.object %}
   {{ heat_stack_prefix|string }}-{{ host }}:
-    ip: {{ hostvars[ host ].management_ip }}
+    ip: 172.29.236.{{ hostvars[ host ].node_id }}
 {% endfor %}
 {% endif %}
