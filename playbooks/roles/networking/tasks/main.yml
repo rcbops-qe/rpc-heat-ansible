@@ -52,7 +52,17 @@
 - name: Bring up all interfaces
   shell: ifup -a
 
-- name: Check Connectivity
+- name: Check br-mgmt Connectivity
   command: fping 172.29.236.{{ hostvars[item].node_id }}
+  changed_when: False
+  with_items: groups.all
+
+- name: Check br-vxlan Connectivity
+  command: fping 172.29.240.{{ hostvars[item].node_id }}
+  changed_when: False
+  with_items: groups.all
+
+- name: Check br-storage Connectivity
+  command: fping 172.29.244.{{ hostvars[item].node_id }}
   changed_when: False
   with_items: groups.all
