@@ -1,0 +1,5 @@
+parameters:
+  ssh_user_key: rpc_support
+  rpc_branch: master
+  rpc_heat_ansible_repo: https://github.com/rcbops-qe/rpc-heat-ansible.git
+  rpc_heat_ansible_branch: master

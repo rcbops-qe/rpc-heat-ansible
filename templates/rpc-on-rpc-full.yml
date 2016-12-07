@@ -153,7 +153,7 @@ parameters:
     type: string
     label: Server image
     description: The image to use for all servers
-    default: 'Ubuntu 14.04 LTS (Trusty Tahr)'
+    default: 'ubuntu-trusty-heat-agent'
 
 # Template Resources
 resources:
