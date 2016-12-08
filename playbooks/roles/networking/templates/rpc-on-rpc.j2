@@ -45,9 +45,9 @@ iface br-mgmt inet static
     bridge_waitport 0
     bridge_fd 0
     bridge_ports vxlan-mgmt
+    mtu 1450
     address 172.29.236.{{ node_id }}
     netmask 255.255.252.0
-    mtu 1450
     dns-nameservers 8.8.8.8
 
 # Bridge Storage
@@ -57,9 +57,10 @@ iface br-storage inet static
     bridge_waitport 0
     bridge_fd 0
     bridge_ports vxlan-storage
+    mtu 1450
     address 172.29.244.{{ node_id }}
     netmask 255.255.252.0
-    mtu 1450
+
 
 # Bridge VXLAN
 auto br-vxlan
@@ -68,9 +69,10 @@ iface br-vxlan inet static
     bridge_waitport 0
     bridge_fd 0
     bridge_ports vxlan-vxlan
+    mtu 1450
     address 172.29.240.{{ node_id }}
     netmask 255.255.252.0
-    mtu 1450
+
 
 # Bridge VLAN
 auto br-vlan
