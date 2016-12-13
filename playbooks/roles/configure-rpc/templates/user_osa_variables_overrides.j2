@@ -51,3 +51,7 @@ tempest_swift_discoverable_apis:
 tempest_tempest_conf_overrides:
   identity-feature-enabled:
     api_extensions: OS-REVOKE,OS-FEDERATION,OS-KSCRUD,OS-SIMPLE-CERT,OS-OAUTH1,OS-EC2
+
+# mtu overrides
+lxc_container_default_mtu: "1450"
+lxc_net_mtu: 1450
