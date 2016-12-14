@@ -100,8 +100,10 @@ storage-infra_hosts:
 # FIXME Only deploy a single repo container until lsync bug is fixed.
 {% if groups.infra|length > 0 %}
 repo-infra_hosts:
-  {{ heat_stack_prefix|string }}-{{ groups.infra|first }}:
-    ip: {{ hostvars[ groups.infra|first ].ansible_eth0.ipv4.address }}
+{% for host in groups.infra %}
+  {{ heat_stack_prefix|string }}-{{ host }}:
+    ip: {{ hostvars[ host ].ansible_eth0.ipv4.address }}
+{% endfor %}
 {% endif %}
 
 {% if groups.infra|length > 0 %}
