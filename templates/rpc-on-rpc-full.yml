@@ -13,6 +13,11 @@ parameters:
     label: Ansible Tag
     description: This ansible tag to be run via ansible.
     default: prepare
+  ansible_forks:
+    type: number
+    label: Ansible FORKS
+    description: The FORKS variable to set for ansible runs
+    default: 10
   ssh_user_key:
     type: string
     label: SSH Keypair Name
@@ -1326,14 +1331,15 @@ resources:
         - name: rpc_heat_ansible_branch
           description: RPC Heat Ansible Git Branch/Tag
           type: String
+        - name: ansible_forks
+          description: Ansible FORKS variable
       config: |
         #!/bin/bash
 
-        set -e
-        set -x
+        set -e -u -x
 
-        # Set Ansible FORKS
-        export FORKS=10
+        # Set Ansible Parameters
+        export ANSIBLE_FORCE_COLOR=true
 
         logdir=/var/log/heat-deployments
         prefix=${logdir}/config-rpc-software
@@ -1434,7 +1440,7 @@ resources:
 
         # Run Prepare Ansible Tags
         pushd /opt/rpc-heat-ansible/playbooks/
-        ansible-playbook -v -i /opt/rpc-on-rpc/inventory -t prepare rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
+        ansible-playbook -v -f $ansible_forks -i /opt/rpc-on-rpc/inventory -t prepare rpc-on-rpc-playbook.yml || exit_failure "Ansible Playbook Run Failure"
         popd
 
         exit_success
@@ -1452,6 +1458,8 @@ resources:
           get_param: rpc_heat_ansible_repo
         rpc_heat_ansible_branch:
           get_param: rpc_heat_ansible_branch
+        ansible_forks:
+          get_param: ansible_forks
       config:
         get_resource: rpc_host_ansible_config
       server:
@@ -1475,17 +1483,19 @@ resources:
     type: OS::Heat::SoftwareConfig
     properties:
       group: script
+      inputs:
+        - name: ansible_forks
+          description: Ansible FORKS variable
       config: |
         #!/bin/bash
 
-        set -e
-        set -x
+        set -e -u -x
 
         # Set RPC deploy.sh bash environment variables
         export DEPLOY_TEMPEST="yes"
         export DEPLOY_HAPROXY="yes"
         export DEPLOY_MAAS="no"
-        export FORKS=10
+        export FORKS=$ansible_forks
 
         function exit_failure {
           echo "FAILURE: '$@'"
@@ -1517,6 +1527,9 @@ resources:
   rpc_software_deploy:
     type: OS::Heat::SoftwareDeployment
     properties:
+      input_values:
+        ansible_forks:
+          get_param: ansible_forks
       config:
         get_resource: rpc_software_deploy_config
       server:
