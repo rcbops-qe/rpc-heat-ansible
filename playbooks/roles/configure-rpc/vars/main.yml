@@ -1,0 +1,28 @@
+# Ceph Config
+ceph_config:
+  glance_default_store: rbd
+  nova_libvirt_images_rbd_pool: vms
+  nova_force_config_drive: False
+  nova_libvirtd_listen_tls: 0
+  nova_libvirtd_listen_tcp: 1
+  nova_libvirtd_auth_tcp: none
+  volume_driver: cinder.volume.drivers.rbd.RBDDriver
+  rbd_pool: volumes
+  rbd_ceph_conf: /etc/ceph/ceph.conf
+  rbd_flatten_volume_from_snapshot: 'false'
+  rbd_max_clone_depth: 5
+  rbd_store_chunk_size: 4
+  rados_connect_timeout: -1
+  glance_api_version: 2
+  volume_backend_name: ceph
+  monitor_interface: eth1
+  public_network: 172.29.236.0/22
+  cluster_network: 192.168.1.0/24
+  devices:
+    - /dev/vdc
+    - /dev/vdd
+    - /dev/vde
+  raw_journal_devices:
+    - /dev/vdb
+    - /dev/vdb
+    - /dev/vdb

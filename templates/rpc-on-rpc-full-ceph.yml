@@ -4,7 +4,7 @@ heat_template_version: 2015-10-15
 # Template Description
 description: >
   Deploy A Rackspace Private Cloud on Rackspace Private Cloud
-  Includes: Full Compute Stack, Block Storage, Object Storage
+  Includes: Full Compute Stack, Block Storage, Ceph Storage
 
 # Template Parameters
 parameters:
@@ -77,10 +77,10 @@ parameters:
     label: block server root volume size
     description: The size in GB of the block server root volume for the servers
     default: 5
-  object_root_volume_size:
+  ceph_root_volume_size:
     type: number
-    label: object server root volume size
-    description: The size in GB of the object server root volume for the servers
+    label: Ceph Server root volume size
+    description: The size in GB of the Ceph Server root volume for the servers
     default: 5
   root_volume_type:
     type: string
@@ -94,7 +94,7 @@ parameters:
   block_volume_type:
     type: string
     label: block volume type
-    description: The type of volume to be used for block server object volumes
+    description: The type of volume to be used for block server ceph volumes
     default: lvm
     constraints:
       - allowed_values:
@@ -103,21 +103,35 @@ parameters:
   block_volume_size:
     type: number
     label: block volume size
-    description: The size in GB of each block servers object storage
+    description: The size in GB of each block servers ceph storage
     default: 10
-  object_volume_type:
+  ceph_volume_type:
     type: string
-    label: object volume type
-    description: The type of volume to be used for object server object volumes
+    label: ceph volume type
+    description: The type of volume to be used for Ceph Server ceph volumes
     default: lvm
     constraints:
       - allowed_values:
         - lvm
         - lvm_ssd
-  object_volume_size:
+  ceph_volume_size:
     type: number
-    label: object volume size
-    description: The size in GB of each object servers object storage
+    label: ceph volume size
+    description: The size in GB of each Ceph Servers ceph storage
+    default: 10
+  ceph_journal_type:
+    type: string
+    label: ceph volume type
+    description: The type of volume to be used for Ceph Server journal volumes
+    default: lvm_ssd
+    constraints:
+      - allowed_values:
+        - lvm
+        - lvm_ssd
+  ceph_journal_size:
+    type: number
+    label: ceph volume size
+    description: The size in GB of each Ceph Servers ceph journal storage
     default: 10
   deploy_retries:
     type: number
@@ -149,9 +163,9 @@ parameters:
     label: Block Node Flavor
     description: The flavor for the infra node(s)
     default: rpc.small
-  object_flavor:
+  ceph_flavor:
     type: string
-    label: Object Node Flavor
+    label: ceph Node Flavor
     description: The flavor for the infra node(s)
     default: rpc.small
   server_image:
@@ -419,15 +433,15 @@ resources:
       volume_type:
         get_param: root_volume_type
 
-  # Create root volume for object01
-  root_volume_object01:
+  # Create root volume for ceph01
+  root_volume_ceph01:
     type: OS::Cinder::Volume
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-object01-root"
+          template: "%heat_stack_name%-%heat_stack_prefix%-ceph01-root"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
@@ -436,19 +450,19 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: object_root_volume_size
+        get_param: ceph_root_volume_size
       volume_type:
         get_param: root_volume_type
 
-  # Create root volume for object02
-  root_volume_object02:
+  # Create root volume for ceph02
+  root_volume_ceph02:
     type: OS::Cinder::Volume
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-object02-root"
+          template: "%heat_stack_name%-%heat_stack_prefix%-ceph02-root"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
@@ -457,19 +471,19 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: object_root_volume_size
+        get_param: ceph_root_volume_size
       volume_type:
         get_param: root_volume_type
 
-  # Create root volume for object03
-  root_volume_object03:
+  # Create root volume for ceph03
+  root_volume_ceph03:
     type: OS::Cinder::Volume
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-object03-root"
+          template: "%heat_stack_name%-%heat_stack_prefix%-ceph03-root"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
@@ -478,7 +492,7 @@ resources:
       image:
         get_param: server_image
       size:
-        get_param: object_root_volume_size
+        get_param: ceph_root_volume_size
       volume_type:
         get_param: root_volume_type
 
@@ -522,186 +536,246 @@ resources:
       volume_type:
         get_param: block_volume_type
 
-  # Create 3 cinder volumes for each object node
-  # Create cinder volume 1 object server 1
-  volume01_os01:
+  # Create journal volume for Ceph Server 1
+  journal_volume_ceph01:
     type: OS::Cinder::Volume
-    description: Volume 2 for Object Server 1
+    description: Journal Volume for Ceph Server 1
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-os01"
+          template: "%heat_stack_name%-%heat_stack_prefix%-journal-ceph01"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
       size:
-        get_param: object_volume_size
+        get_param: ceph_journal_size
       volume_type:
-        get_param: object_volume_type
+        get_param: ceph_journal_type
 
-  # Create cinder volume 2 object server 1
-  volume02_os01:
+# Create journal volume for Ceph Server 2
+  journal_volume_ceph02:
     type: OS::Cinder::Volume
-    description: Volume 2 for Object Server 1
+    description: Journal Volume for Ceph Server 2
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-volume02-os01"
+          template: "%heat_stack_name%-%heat_stack_prefix%-journal-ceph02"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
       size:
-        get_param: object_volume_size
+        get_param: ceph_journal_size
       volume_type:
-        get_param: object_volume_type
+        get_param: ceph_journal_type
 
-  # Create cinder volume 3 object server 1
-  volume03_os01:
+# Create journal volume for Ceph Server 3
+  journal_volume_ceph03:
     type: OS::Cinder::Volume
-    description: Volume 3 for Object Server 1
+    description: Journal Volume for Ceph Server 3
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-volume03-os01"
+          template: "%heat_stack_name%-%heat_stack_prefix%-journal-ceph03"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
       size:
-        get_param: object_volume_size
+        get_param: ceph_journal_size
       volume_type:
-        get_param: object_volume_type
+        get_param: ceph_journal_type
 
-  # Create cinder volume 1 object server 2
-  volume01_os02:
+  # Create 3 cinder volumes for each ceph node
+  # Create cinder volume 1 Ceph Server 1
+  volume01_ceph01:
     type: OS::Cinder::Volume
-    description: Volume 1 for Object Server 2
+    description: Volume 2 for Ceph Server 1
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-os02"
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-ceph01"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
       size:
-        get_param: object_volume_size
+        get_param: ceph_volume_size
       volume_type:
-        get_param: object_volume_type
+        get_param: ceph_volume_type
 
-  # Create cinder volume 2 object server 2
-  volume02_os02:
+  # Create cinder volume 2 Ceph Server 1
+  volume02_ceph01:
     type: OS::Cinder::Volume
-    description: Volume 2 for Object Server 2
+    description: Volume 2 for Ceph Server 1
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-volume02-os02"
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume02-ceph01"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
       size:
-        get_param: object_volume_size
+        get_param: ceph_volume_size
       volume_type:
-        get_param: object_volume_type
+        get_param: ceph_volume_type
 
-  # Create cinder volume 3 object server 2
-  volume03_os02:
+  # Create cinder volume 3 Ceph Server 1
+  volume03_ceph01:
     type: OS::Cinder::Volume
-    description: Volume 3 for Object Server 2
+    description: Volume 3 for Ceph Server 1
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-volume03-os02"
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume03-ceph01"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
       size:
-        get_param: object_volume_size
+        get_param: ceph_volume_size
       volume_type:
-        get_param: object_volume_type
+        get_param: ceph_volume_type
 
-  # Create cinder volume 1 object server 3
-  volume01_os03:
+  # Create cinder volume 1 Ceph Server 2
+  volume01_ceph02:
     type: OS::Cinder::Volume
-    description: Volume 1 for Object Server 3
+    description: Volume 1 for Ceph Server 2
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-os03"
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-ceph02"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
       size:
-        get_param: object_volume_size
+        get_param: ceph_volume_size
       volume_type:
-        get_param: object_volume_type
+        get_param: ceph_volume_type
 
-  # Create cinder volume 2 object server 3
-  volume02_os03:
+  # Create cinder volume 2 Ceph Server 2
+  volume02_ceph02:
     type: OS::Cinder::Volume
-    description: Volume 2 for Object Server 3
+    description: Volume 2 for Ceph Server 2
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-volume02-os03"
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume02-ceph02"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
       size:
-        get_param: object_volume_size
+        get_param: ceph_volume_size
       volume_type:
-        get_param: object_volume_type
+        get_param: ceph_volume_type
 
-  # Create cinder volume 3 object server 3
-  volume03_os03:
+  # Create cinder volume 3 Ceph Server 2
+  volume03_ceph02:
     type: OS::Cinder::Volume
-    description: Volume 3 for Object Server 3
+    description: Volume 3 for Ceph Server 2
     properties:
       availability_zone:
         get_param: availability_zone
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-volume03-os03"
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume03-ceph02"
           params:
             "%heat_stack_prefix%":
               get_param: "OS::stack_id"
             "%heat_stack_name%":
               get_param: "OS::stack_name"
       size:
-        get_param: object_volume_size
+        get_param: ceph_volume_size
       volume_type:
-        get_param: object_volume_type
+        get_param: ceph_volume_type
+
+  # Create cinder volume 1 Ceph Server 3
+  volume01_ceph03:
+    type: OS::Cinder::Volume
+    description: Volume 1 for Ceph Server 3
+    properties:
+      availability_zone:
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume01-ceph03"
+          params:
+            "%heat_stack_prefix%":
+              get_param: "OS::stack_id"
+            "%heat_stack_name%":
+              get_param: "OS::stack_name"
+      size:
+        get_param: ceph_volume_size
+      volume_type:
+        get_param: ceph_volume_type
+
+  # Create cinder volume 2 Ceph Server 3
+  volume02_ceph03:
+    type: OS::Cinder::Volume
+    description: Volume 2 for Ceph Server 3
+    properties:
+      availability_zone:
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume02-ceph03"
+          params:
+            "%heat_stack_prefix%":
+              get_param: "OS::stack_id"
+            "%heat_stack_name%":
+              get_param: "OS::stack_name"
+      size:
+        get_param: ceph_volume_size
+      volume_type:
+        get_param: ceph_volume_type
+
+  # Create cinder volume 3 Ceph Server 3
+  volume03_ceph03:
+    type: OS::Cinder::Volume
+    description: Volume 3 for Ceph Server 3
+    properties:
+      availability_zone:
+        get_param: availability_zone
+      name:
+        str_replace:
+          template: "%heat_stack_name%-%heat_stack_prefix%-volume03-ceph03"
+          params:
+            "%heat_stack_prefix%":
+              get_param: "OS::stack_id"
+            "%heat_stack_name%":
+              get_param: "OS::stack_name"
+      size:
+        get_param: ceph_volume_size
+      volume_type:
+        get_param: ceph_volume_type
 
   ### Configuration of servers and software ###
 
@@ -745,9 +819,9 @@ resources:
                   compute02    ansible_ssh_host=%compute02_management_ip% node_id=15
                   block01      ansible_ssh_host=%block01_management_ip%   node_id=16
                   block02      ansible_ssh_host=%block02_management_ip%   node_id=17
-                  object01     ansible_ssh_host=%object01_management_ip%  node_id=18
-                  object02     ansible_ssh_host=%object02_management_ip%  node_id=19
-                  object03     ansible_ssh_host=%object03_management_ip%  node_id=20
+                  ceph01       ansible_ssh_host=%ceph01_management_ip%    node_id=18
+                  ceph02       ansible_ssh_host=%ceph02_management_ip%    node_id=19
+                  ceph03       ansible_ssh_host=%ceph03_management_ip%    node_id=20
 
                   [deployment]
                   infra01
@@ -768,10 +842,10 @@ resources:
                   block01
                   block02
 
-                  [object]
-                  object01
-                  object02
-                  object03
+                  [ceph]
+                  ceph01
+                  ceph02
+                  ceph03
                 params:
                   "%heat_stack_id%":            { get_param: "OS::stack_id" }
                   "%heat_stack_name%":          { get_param: "OS::stack_name" }
@@ -785,9 +859,9 @@ resources:
                   "%compute02_management_ip%":  { get_attr: [ server_compute02, addresses,    { get_resource: management_network }, 0, addr ] }
                   "%block01_management_ip%":    { get_attr: [ server_block01, addresses,      { get_resource: management_network }, 0, addr ] }
                   "%block02_management_ip%":    { get_attr: [ server_block02, addresses,      { get_resource: management_network }, 0, addr ] }
-                  "%object01_management_ip%":   { get_attr: [ server_object01, addresses,     { get_resource: management_network }, 0, addr ] }
-                  "%object02_management_ip%":   { get_attr: [ server_object02, addresses,     { get_resource: management_network }, 0, addr ] }
-                  "%object03_management_ip%":   { get_attr: [ server_object03, addresses,     { get_resource: management_network }, 0, addr ] }
+                  "%ceph01_management_ip%":     { get_attr: [ server_ceph01, addresses,       { get_resource: management_network }, 0, addr ] }
+                  "%ceph02_management_ip%":     { get_attr: [ server_ceph02, addresses,       { get_resource: management_network }, 0, addr ] }
+                  "%ceph03_management_ip%":     { get_attr: [ server_ceph03, addresses,       { get_resource: management_network }, 0, addr ] }
 
   deployment_init:
     type: OS::Heat::MultipartMime
@@ -846,7 +920,7 @@ resources:
         - config: { get_resource: rpc_host_cloud_config }
         - config: { get_resource: rpc_host_software_config }
 
-  object_init:
+  ceph_init:
     type: OS::Heat::MultipartMime
     properties:
       parts:
@@ -1088,7 +1162,6 @@ resources:
         get_resource: volume01_block01
       instance_uuid:
         get_resource: server_block01
-      mountpoint: /dev/vdc
 
   # Create Block 02 Server
   server_block02:
@@ -1130,29 +1203,28 @@ resources:
         get_resource: volume01_block02
       instance_uuid:
         get_resource: server_block02
-      mountpoint: /dev/vdc
 
-  # Create Object 01 Server
-  server_object01:
+  # Create Ceph 01 Server
+  server_ceph01:
     type: OS::Nova::Server
     properties:
       availability_zone:
         get_param: availability_zone
       flavor:
-        get_param: object_flavor
+        get_param: ceph_flavor
       admin_pass:
         get_attr: [ password, value ]
       block_device_mapping:
         - device_name: vda
           volume_id:
-            get_resource: root_volume_object01
+            get_resource: root_volume_ceph01
           delete_on_termination: true
       config_drive: True
       key_name:
         get_resource: keypair
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-object01"
+          template: "%heat_stack_name%-%heat_stack_prefix%-ceph01"
           params:
             "%heat_stack_prefix%" :
               get_param: "OS::stack_id"
@@ -1162,58 +1234,66 @@ resources:
         - network:
             get_resource: management_network
       user_data_format: SOFTWARE_CONFIG
-      user_data: { get_resource: object_init }
+      user_data: { get_resource: ceph_init }
 
-  # Create Volume Attachments for Object Server 01
-  # Create attachment for cinder volume 1 object server 1
-  volume01_os01_attachment:
+  # Create Volume Attachments for Ceph Server 01
+  # Create attachment for journal volume
+  journal_volume_ceph01_attachment:
     type: OS::Cinder::VolumeAttachment
     properties:
       volume_id:
-        get_resource: volume01_os01
+        get_resource: journal_volume_ceph01
       instance_uuid:
-        get_resource: server_object01
-      mountpoint: /dev/vdb
+        get_resource: server_ceph01
 
-  # Create attachment for cinder volume 2 object server 1
-  volume01_os02_attachment:
+  # Create attachment for cinder volume 1 Ceph Server 1
+  volume01_ceph01_attachment:
     type: OS::Cinder::VolumeAttachment
     properties:
       volume_id:
-        get_resource: volume02_os01
+        get_resource: volume01_ceph01
       instance_uuid:
-        get_resource: server_object01
+        get_resource: server_ceph01
 
-  # Create attachment for cinder volume 3 object server 1
-  volume01_os03_attachment:
+  # Create attachment for cinder volume 2 Ceph Server 1
+  volume01_ceph02_attachment:
     type: OS::Cinder::VolumeAttachment
     properties:
       volume_id:
-        get_resource: volume03_os01
+        get_resource: volume02_ceph01
       instance_uuid:
-        get_resource: server_object01
+        get_resource: server_ceph01
 
-  # Create Object 02 Server
-  server_object02:
+  # Create attachment for cinder volume 3 Ceph Server 1
+  volume01_ceph03_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id:
+        get_resource: volume03_ceph01
+      instance_uuid:
+        get_resource: server_ceph01
+
+  # Create ceph 02 Server
+  server_ceph02:
     type: OS::Nova::Server
     properties:
       availability_zone:
         get_param: availability_zone
       flavor:
-        get_param: object_flavor
+        get_param: ceph_flavor
       admin_pass:
         get_attr: [ password, value ]
       block_device_mapping:
         - device_name: vda
           volume_id:
-            get_resource: root_volume_object02
+            get_resource: root_volume_ceph02
           delete_on_termination: true
       config_drive: True
       key_name:
         get_resource: keypair
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-object02"
+          template: "%heat_stack_name%-%heat_stack_prefix%-ceph02"
           params:
             "%heat_stack_prefix%" :
               get_param: "OS::stack_id"
@@ -1223,57 +1303,67 @@ resources:
         - network:
             get_resource: management_network
       user_data_format: SOFTWARE_CONFIG
-      user_data: { get_resource: object_init }
+      user_data: { get_resource: ceph_init }
 
-  # Create Volume Attachments for Object Server 02
-  # Create attachment for cinder volume 1 object server 2
-  volume02_os01_attachment:
+  # Create Volume Attachments for Ceph Server 02
+
+  # Create attachment for journal volume
+  journal_volume_ceph01_attachment:
     type: OS::Cinder::VolumeAttachment
     properties:
       volume_id:
-        get_resource: volume01_os02
+        get_resource: journal_volume_ceph02
       instance_uuid:
-        get_resource: server_object02
+        get_resource: server_ceph02
 
-  # Create attachment for cinder volume 2 object server 2
-  volume02_os02_attachment:
+  # Create attachment for cinder volume 1 Ceph Server 2
+  volume02_ceph01_attachment:
     type: OS::Cinder::VolumeAttachment
     properties:
       volume_id:
-        get_resource: volume02_os02
+        get_resource: volume01_ceph02
       instance_uuid:
-        get_resource: server_object02
+        get_resource: server_ceph02
 
-  # Create attachment for cinder volume 3 object server 2
-  volume02_os03_attachment:
+  # Create attachment for cinder volume 2 Ceph Server 2
+  volume02_ceph02_attachment:
     type: OS::Cinder::VolumeAttachment
     properties:
       volume_id:
-        get_resource: volume03_os02
+        get_resource: volume02_ceph02
       instance_uuid:
-        get_resource: server_object02
+        get_resource: server_ceph02
 
-  # Create Object 03 Server
-  server_object03:
+  # Create attachment for cinder volume 3 Ceph Server 2
+  volume02_ceph03_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id:
+        get_resource: volume03_ceph02
+      instance_uuid:
+        get_resource: server_ceph02
+
+  # Create ceph 03 Server
+  server_ceph03:
     type: OS::Nova::Server
     properties:
       availability_zone:
         get_param: availability_zone
       flavor:
-        get_param: object_flavor
+        get_param: ceph_flavor
       admin_pass:
         get_attr: [ password, value ]
       block_device_mapping:
         - device_name: vda
           volume_id:
-            get_resource: root_volume_object03
+            get_resource: root_volume_ceph03
           delete_on_termination: true
       config_drive: True
       key_name:
         get_resource: keypair
       name:
         str_replace:
-          template: "%heat_stack_name%-%heat_stack_prefix%-object03"
+          template: "%heat_stack_name%-%heat_stack_prefix%-ceph03"
           params:
             "%heat_stack_prefix%" :
               get_param: "OS::stack_id"
@@ -1283,35 +1373,45 @@ resources:
         - network:
             get_resource: management_network
       user_data_format: SOFTWARE_CONFIG
-      user_data: { get_resource: object_init }
+      user_data: { get_resource: ceph_init }
 
-  # Create Volume Attachments for Object Server 03
-  # Create attachment for cinder volume 1 object server 3
-  volume03_os01_attachment:
+  # Create Volume Attachments for Ceph Server 03
+
+  # Create attachment for journal volume
+  journal_volume_ceph01_attachment:
     type: OS::Cinder::VolumeAttachment
     properties:
       volume_id:
-        get_resource: volume01_os03
+        get_resource: journal_volume_ceph03
       instance_uuid:
-        get_resource: server_object03
+        get_resource: server_ceph03
 
-  # Create attachment for cinder volume 2 object server 3
-  volume03_os02_attachment:
+  # Create attachment for cinder volume 1 Ceph Server 3
+  volume03_ceph01_attachment:
     type: OS::Cinder::VolumeAttachment
     properties:
       volume_id:
-        get_resource: volume02_os03
+        get_resource: volume01_ceph03
       instance_uuid:
-        get_resource: server_object03
+        get_resource: server_ceph03
 
-  # Create attachment for cinder volume 3 object server 3
-  volume03_os03_attachment:
+  # Create attachment for cinder volume 2 Ceph Server 3
+  volume03_ceph02_attachment:
     type: OS::Cinder::VolumeAttachment
     properties:
       volume_id:
-        get_resource: volume03_os03
+        get_resource: volume02_ceph03
       instance_uuid:
-        get_resource: server_object03
+        get_resource: server_ceph03
+
+  # Create attachment for cinder volume 3 Ceph Server 3
+  volume03_ceph03_attachment:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      volume_id:
+        get_resource: volume03_ceph03
+      instance_uuid:
+        get_resource: server_ceph03
 
   ### Pre Deploy Host Configuration ###
   rpc_host_ansible_config:
@@ -1472,9 +1572,9 @@ resources:
       - server_compute02
       - server_block01
       - server_block02
-      - server_object01
-      - server_object02
-      - server_object03
+      - server_ceph01
+      - server_ceph02
+      - server_ceph03
 
   ### Deployment of RPC Software ###
 
@@ -1518,7 +1618,7 @@ resources:
 
         echo "Deploy RPC Software"
         pushd /opt/rpc-openstack/
-        ./scripts/deploy.sh || exit_failure "RPC deploy.sh Failure"
+        #./scripts/deploy.sh || exit_failure "RPC deploy.sh Failure"
         popd
 
         exit_success
@@ -1565,9 +1665,9 @@ outputs:
           compute02    - %server_compute02_ip%
           block01      - %server_block01_ip%
           block02      - %server_block02_ip%
-          object01     - %server_object01_ip%
-          object02     - %server_object02_ip%
-          object03     - %server_object03_ip%
+          ceph01     - %server_ceph01_ip%
+          ceph02     - %server_ceph02_ip%
+          ceph03     - %server_ceph03_ip%
         params:
           "%server_infra01_ip%":   { get_attr: [ server_infra01, addresses,     { get_resource: management_network }, 0, addr ] }
           "%server_infra02_ip%":   { get_attr: [ server_infra02, addresses,     { get_resource: management_network }, 0, addr ] }
@@ -1576,6 +1676,6 @@ outputs:
           "%server_compute02_ip%": { get_attr: [ server_compute02, addresses,   { get_resource: management_network }, 0, addr ] }
           "%server_block01_ip%":   { get_attr: [ server_block01, addresses,     { get_resource: management_network }, 0, addr ] }
           "%server_block02_ip%":   { get_attr: [ server_block02, addresses,     { get_resource: management_network }, 0, addr ] }
-          "%server_object01_ip%":  { get_attr: [ server_object01, addresses,    { get_resource: management_network }, 0, addr ] }
-          "%server_object02_ip%":  { get_attr: [ server_object02, addresses,    { get_resource: management_network }, 0, addr ] }
-          "%server_object03_ip%":  { get_attr: [ server_object03, addresses,    { get_resource: management_network }, 0, addr ] }
+          "%server_ceph01_ip%":  { get_attr: [ server_ceph01, addresses,    { get_resource: management_network }, 0, addr ] }
+          "%server_ceph02_ip%":  { get_attr: [ server_ceph02, addresses,    { get_resource: management_network }, 0, addr ] }
+          "%server_ceph03_ip%":  { get_attr: [ server_ceph03, addresses,    { get_resource: management_network }, 0, addr ] }
