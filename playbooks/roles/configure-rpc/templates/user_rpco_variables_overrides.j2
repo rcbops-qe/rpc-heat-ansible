@@ -1,0 +1,30 @@
+{% if groups.ceph is defined %}
+# The interface within the MON containers for the Ceph MON
+# service to listen on. This is usually em2.
+monitor_interface: eth2
+
+#
+# The network CIDR for the network over which clients will
+# access Ceph MONs and OSDs. This is usually br-storage network CIDR.
+public_network: 172.29.244.0/22
+
+#
+# The network CIDR for OSD to OSD replication. This is usually
+# the br-repl network CIDR when using dedicated replication,
+# however this can also be then br-storage network CIDR.
+cluster_network: 172.29.244.0/22
+ceph_stable: true
+{% raw %}
+fsid: '{{ fsid_uuid }}'
+{% endraw %}
+
+# Set the journal size to: "Size of journal device / number of OSDs that
+#                           will be using it as a journal"
+# For example: Given a 400G journal disk with 5 disks using it as their
+#              journal device, the journal size should be 80G each or
+#              80000
+# NOTE: If an OSD host has capacity to have additional OSD devices
+#       added to it in the future, then ensure you leave capacity on the
+#       journal device to accomodate these additional OSDs.
+journal_size: {{ ceph_config.ceph_journal_size }}
+{% endif %}

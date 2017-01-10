@@ -22,18 +22,32 @@
 - name: Copy OA secrets file
   shell: "cp -r {{ oa_repo_dir }}/etc/openstack_deploy/user_secrets.yml /etc/openstack_deploy/user_osa_secrets.yml"
 
-- name: Install user variables file
+- name: Ensure Cinder Ceph Client UUID secret is added for Ceph Deploys
+  lineinfile:
+    dest: /etc/openstack_deploy/user_rpco_secrets.yml
+    line: 'cinder_ceph_client_uuid:'
+  when: groups.ceph is defined
+
+- name: Setup osa user variables file
   template:
     src: user_osa_variables_overrides.j2
     dest: /etc/openstack_deploy/user_osa_variables_overrides.yml
 
-- name: Install user configuration file
+- name: Setup rpco user variables file
+  template:
+    src: user_rpco_variables_overrides.j2
+    dest: /etc/openstack_deploy/user_rpco_variables_overrides.yml
+
+- name: Setup user configuration file
   template:
     src: user_config.j2
     dest: /etc/openstack_deploy/openstack_user_config.yml
 
-- name: Generate passphrases
+- name: Generate OSA passphrases
   command: "{{ oa_repo_dir }}/scripts/pw-token-gen.py --file /etc/openstack_deploy/user_osa_secrets.yml"
+
+- name: Generate RPC passphrases
+  command: "{{ oa_repo_dir }}/scripts/pw-token-gen.py --file /etc/openstack_deploy/user_rpco_secrets.yml"
 
 - name: Configure Swift
   template:

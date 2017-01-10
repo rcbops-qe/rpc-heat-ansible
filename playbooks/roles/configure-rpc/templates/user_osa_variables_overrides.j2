@@ -11,6 +11,11 @@ glance_swift_store_user: 'service:glance'
 swift_allow_all_users: True
 {% endif %}
 
+{% if groups.ceph is defined %}
+glance_default_store: rbd
+nova_libvirt_images_rbd_pool: vms
+{% endif %}
+
 neutron_plugin_base:
   - neutron.services.l3_router.l3_router_plugin.L3RouterPlugin
   - neutron.services.metering.metering_plugin.MeteringPlugin
