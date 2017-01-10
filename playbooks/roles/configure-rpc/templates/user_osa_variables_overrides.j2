@@ -1,4 +1,4 @@
-{% if groups.object|length > 0 %}
+{% if groups.object is defined %}
 # required for os-glance-install.yml playbook
 glance_default_store: swift
 glance_notification_driver: noop

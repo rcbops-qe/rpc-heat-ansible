@@ -24,9 +24,5 @@ openstack image create --disk-format qcow2 --container-format bare --file "${IMA
 # Create RPC on RPC Flavors
 openstack flavor create --ram 2048 --disk 40 --swap 8 --vcpus 2 --public rpc.small
 openstack flavor create --ram 4096 --disk 80 --swap 8 --vcpus 4 --public rpc.medium
-openstack flavor create --ram 8192 --disk 120 --swap 8 --vcpus 8 --public rpc.large
-
-# Upload Public Key
-# RIGHT NOW I DO THIS THROUGH HORIZON, NEED TO AUTOMATE A SHARED RPCQE KEY
-# This needs to be your key if you want to use it for dev
-openstack keypair create --public-key $KEY_PATH $KEY_NAME
+openstack flavor create --ram 8192 --disk 120 --swap 16 --vcpus 8 --public rpc.large
+openstack flavor create --ram 16384 --disk 160 --swap 16 --vcpus 12 --pulbic rpc.xlarge

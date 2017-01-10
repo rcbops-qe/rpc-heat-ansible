@@ -40,3 +40,11 @@
     src: swift.j2
     dest: /etc/openstack_deploy/conf.d/swift.yml
     mode: 0644
+  when: groups.object is defined
+
+- name: Configure Ceph
+  template:
+    src: ceph.j2
+    dest: /etc/openstack_deploy/conf.d/ceph.yml
+    mode: 0644
+  when: groups.ceph is defined
