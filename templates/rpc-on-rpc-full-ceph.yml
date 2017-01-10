@@ -1595,6 +1595,7 @@ resources:
         export DEPLOY_TEMPEST="yes"
         export DEPLOY_HAPROXY="yes"
         export DEPLOY_MAAS="no"
+        export DEPLOY_CEPH="yes"
         export FORKS=$ansible_forks
 
         function exit_failure {

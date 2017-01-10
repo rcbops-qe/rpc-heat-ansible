@@ -33,8 +33,12 @@ global_overrides:
           - cinder_api
           - cinder_volume
           - nova_compute
+{% if groups.object is defined %}
           - swift_proxy
-          # - mons
+{% endif %}
+{% if groups.ceph is defined %}
+          - mons
+{% endif %}
         container_bridge: "br-storage"
         container_type: "veth"
         container_interface: "eth2"
@@ -97,7 +101,6 @@ storage-infra_hosts:
 {% endfor %}
 {% endif %}
 
-# FIXME Only deploy a single repo container until lsync bug is fixed.
 {% if groups.infra|length > 0 %}
 repo-infra_hosts:
 {% for host in groups.infra %}
