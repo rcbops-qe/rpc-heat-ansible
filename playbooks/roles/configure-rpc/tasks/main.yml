@@ -37,6 +37,7 @@
   template:
     src: user_rpco_variables_overrides.j2
     dest: /etc/openstack_deploy/user_rpco_variables_overrides.yml
+  when: groups.ceph is defined
 
 - name: Setup user configuration file
   template:
